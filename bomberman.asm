@@ -61,9 +61,43 @@
 
 .eqv TILE_SIZE                4    # tamano de cada celda de juego en fb-units (32px reales / 8px por unidad)
 .eqv TILE_SHIFT               2    # log2(4), para usar shifts en vez de mult/div
-.eqv MAPA_COLUMNAS           16    # 64/4
-.eqv MAPA_FILAS              16    # 64/4
-.eqv MAPA_COL_SHIFT            4   # log2(16), para indexar fila*16 con shift
+.eqv MAPA_COLUMNAS           13    # tiles jugables de ancho (vuelto a 13x13 desde 14x14: el
+                                    # area de 14x14 se sintio demasiado grande una vez que el
+                                    # HUD ya estaba construido y probado)
+.eqv MAPA_FILAS              13    # tiles jugables de alto (idem)
+
+# ----------------------------------------------------------------
+# Franja de HUD (Etapa 8): 3 tiles de ancho a la derecha del mapa,
+# 3 tiles de alto debajo. Con MAPA_COLUMNAS/FILAS=13 y
+# FB_UNIDADES_LADO=64, el mapa ocupa 13*4=52 fb-unidades; quedan
+# 64-52=12 fb-unidades (3 tiles) de HUD en cada franja.
+# ----------------------------------------------------------------
+.eqv HUD_COL_INICIO_FB       52    # fb-unidad x donde empieza la franja lateral derecha
+.eqv HUD_FILA_INICIO_FB      52    # fb-unidad y donde empieza la franja inferior
+.eqv HUD_ANCHO_TILES          3    # ancho de la franja lateral, en tiles
+.eqv COLOR_HUD_FONDO_LATERAL 0x000A2318  # verde muy oscuro, fondo de la franja lateral
+.eqv COLOR_HUD_FONDO_INFERIOR 0x002A170A # marron muy oscuro, fondo de la franja inferior
+
+# ----------------------------------------------------------------
+# Contenido del HUD lateral: contadores de vidas/rango/bombas como
+# cuadraditos (Etapa 8). Cada cuadradito ocupa HUD_CUADRADITO
+# fb-unidades de lado; HUD_CUADRADITOS_POR_FILA caben en el ancho
+# de la franja lateral (HUD_ANCHO_TILES*TILE_SIZE=8 fb-unidades).
+# ----------------------------------------------------------------
+.eqv HUD_CUADRADITO             2   # lado de cada cuadradito, en fb-unidades (16px)
+.eqv HUD_CUADRADITOS_POR_FILA   4   # cuantos caben por fila en el ancho de la franja lateral
+.eqv HUD_MARGEN_IZQ             0   # margen entre el borde de la franja y el primer cuadradito.
+                                    # Debe ser 0: HUD_CUADRADITOS_POR_FILA(4) * HUD_CUADRADITO(2)
+                                    # = 8 fb-unidades = exactamente el ancho de la franja lateral
+                                    # (HUD_ANCHO_TILES*TILE_SIZE=8) -- cualquier margen > 0 hace
+                                    # que la ultima columna de cuadraditos se salga del
+                                    # framebuffer (bug encontrado y corregido: con margen=1 el
+                                    # calculo daba x_max=65, uno mas alla del limite de 64
+                                    # fb-unidades del framebuffer).
+
+.eqv HUD_VIDAS_FILA_INICIO_FB   2   # fila (relativa al inicio de la franja) donde arrancan los cuadraditos de vidas
+.eqv HUD_RANGO_FILA_INICIO_FB  10   # idem para rango
+.eqv HUD_BOMBAS_FILA_INICIO_FB 16   # idem para bombas
 
 .eqv HITBOX_SIZE               4   # hitbox del jugador/enemigos = TILE_SIZE completo (sin margen).
                                     # NOTA: originalmente se probo un hitbox reducido (2, con
@@ -121,6 +155,7 @@
 # Vidas e invulnerabilidad (Etapa 4)
 # ----------------------------------------------------------------
 .eqv JUGADOR_VIDAS_INICIAL     3    # vidas iniciales, estandar Bomberman clasico
+.eqv JUGADOR_VIDAS_TOPE        9    # tope maximo de vidas acumulables con powerup de vida extra
 .eqv JUGADOR_INVULN_FRAMES   800    # "ticks" del loop principal de invulnerabilidad tras
                                     # perder una vida. Subido de 400 a 800 (el doble) para
                                     # dar aun mas margen de reaccion tras perder una vida.
@@ -163,8 +198,12 @@
 .eqv COLOR_ROJO          0x00FF0000
 .eqv COLOR_VERDE         0x0000FF00
 .eqv COLOR_AZUL          0x000000FF
-.eqv COLOR_LADRILLO      0x00E86F00   # bloque destructible
-.eqv COLOR_ACERO         0x00B0B0B0   # bloque indestructible
+.eqv COLOR_LADRILLO      0x00E86F00   # bloque destructible (color plano, ya no se usa tras el sprite con textura, se deja por compatibilidad)
+.eqv COLOR_ACERO         0x00B0B0B0   # bloque indestructible (idem)
+.eqv COLOR_ACERO_OSCURO    0x00707070   # borde/sombra del sprite de acero
+.eqv COLOR_ACERO_CLARO     0x00C8C8C8   # cara superior del sprite de acero
+.eqv COLOR_LADRILLO_CLARO  0x00C85A00   # cuerpo del ladrillo en el sprite destructible
+.eqv COLOR_MORTERO         0x00703300   # lineas de mortero entre ladrillos
 .eqv COLOR_AMARILLO      0x00FFD000   # salida / detalles
 .eqv COLOR_JUGADOR       0x0000FFFF   # cian, temporal para checkpoint visual
 .eqv COLOR_ENEMIGO_RECTO       0x00FF00A0   # rosa/magenta
@@ -172,7 +211,7 @@
 .eqv COLOR_ENEMIGO_PERSEGUIDOR 0x00804000   # marron
 .eqv COLOR_POWERUP_LLAMA       0x00FFEE33   # amarillo claro
 .eqv COLOR_POWERUP_BOMBA_EXTRA 0x0033CCFF   # celeste
-.eqv COLOR_POWERUP_PATIN       0x0033FF66   # verde
+.eqv COLOR_POWERUP_VIDA_EXTRA  0x0033FF66   # verde -- da una vida extra al recogerlo
 
 # ----------------------------------------------------------------
 # Tipos de celda del mapa (bits [7:0] de la word de celda)
@@ -188,71 +227,132 @@
 .eqv POWERUP_NINGUNO         0
 .eqv POWERUP_LLAMA           1
 .eqv POWERUP_BOMBA_EXTRA     2
-.eqv POWERUP_PATIN           3
+.eqv POWERUP_VIDA_EXTRA      3   # suma 1 vida al jugador al recogerlo (reemplazo del
+                                  # powerup de patin: la velocidad de movimiento fraccionario
+                                  # se probo dos veces y ambas genero corrupcion visual del
+                                  # sprite -- ver conversacion de diseno -- asi que se
+                                  # reemplazo por un efecto que aprovecha el sistema de vidas
+                                  # ya construido en la Etapa 4, sin tocar la granularidad de
+                                  # movimiento estable)
 .eqv POWERUP_SALIDA_OCULTA   4   # revela CELDA_SALIDA al destruir el bloque
 
 
 .data
 # ----------------------------------------------------------------
-# Mapa del Nivel 1 (16x16 celdas). Cada word empaca:
+# Sprites con textura (Etapa de pulido visual): cada tabla tiene
+# 16 words en orden fila por fila (fila 0 izq->der, fila 1, etc.)
+# representando una grilla de 4x4 fb-unidades (= 1 tile de 32x32px
+# reales). pintar_sprite_16 recorre esta tabla y pinta cada
+# fb-unidad con su color correspondiente.
+# ----------------------------------------------------------------
+sprite_indestructible:
+    .word COLOR_ACERO_OSCURO, COLOR_ACERO_OSCURO, COLOR_ACERO_OSCURO, COLOR_ACERO_OSCURO
+    .word COLOR_ACERO_OSCURO, COLOR_ACERO_CLARO,  COLOR_ACERO_CLARO,  COLOR_ACERO_OSCURO
+    .word COLOR_ACERO_OSCURO, COLOR_ACERO_CLARO,  COLOR_ACERO_CLARO,  COLOR_ACERO_OSCURO
+    .word COLOR_ACERO_OSCURO, COLOR_ACERO_OSCURO, COLOR_ACERO_OSCURO, COLOR_ACERO_OSCURO
+
+sprite_destructible:
+    .word COLOR_MORTERO,        COLOR_LADRILLO_CLARO, COLOR_LADRILLO_CLARO, COLOR_LADRILLO_CLARO
+    .word COLOR_LADRILLO_CLARO, COLOR_LADRILLO_CLARO, COLOR_MORTERO,        COLOR_LADRILLO_CLARO
+    .word COLOR_MORTERO,        COLOR_LADRILLO_CLARO, COLOR_LADRILLO_CLARO, COLOR_LADRILLO_CLARO
+    .word COLOR_LADRILLO_CLARO, COLOR_LADRILLO_CLARO, COLOR_MORTERO,        COLOR_LADRILLO_CLARO
+
+
+# ----------------------------------------------------------------
+# Mapa de los niveles (13x13 celdas, achicado de 16x16 en la
+# Etapa 8 para reservar franja de HUD). Cada word empaca:
 #   bits [7:0]   = tipo de terreno (VACIA=0, INDESTRUCTIBLE=1,
 #                  DESTRUCTIBLE=2, SALIDA=3)
 #   bits [15:8]  = power-up oculto bajo el bloque destructible
-#                  (NINGUNO=0, LLAMA=1, BOMBA_EXTRA=2, PATIN=3,
+#                  (NINGUNO=0, LLAMA=1, BOMBA_EXTRA=2, VIDA_EXTRA=3,
 #                  SALIDA_OCULTA=4)
 #
 # Los valores estan pre-calculados como literales (tipo | (pu<<8))
 # en vez de usar expresiones dentro de .word, porque RARS no
 # garantiza soporte de expresiones aritmeticas en directivas de
 # datos (ver github.com/TheThirdOne/rars/issues/217, abierto).
+#
+# *** Etapa 7: 3 niveles *** mapa_nivel_1/2/3 son los datos FIJOS
+# de cada nivel (nunca se modifican en tiempo de ejecucion).
+# mapa_nivel (mas abajo) es el array de TRABAJO que toda la logica
+# de juego ya existente lee y escribe -- cargar_nivel() copia el
+# mapa fijo correspondiente dentro de mapa_nivel al empezar cada
+# nivel.
+#
+# *** Etapa 8: mapa 13x13 (vuelto de 14x14 -- 14x14 se sintio
+# demasiado grande una vez que el HUD ya estaba construido y
+# probado). Spawn del jugador (1,1); spawn de enemigos
+# (11,3),(1,11),(10,11).
+# ***
+#
+# Nivel 1: ~40% destructibles, 74 celdas vacias conectadas
+# (verificado por BFS). Power-ups: LLAMA (2,3), BOMBA_EXTRA (5,7),
+# VIDA_EXTRA (5,3). Salida oculta en (9,8).
 # ----------------------------------------------------------------
-# *** MAPA DE PRUEBAS DE POWER-UPS ACTIVO (temporal, Etapa 6) ***
-# Sin ajedrez interior, casi sin destructibles "de relleno": solo
-# los 4 bloques con power-up/salida oculta y 2 destructibles
-# normales, todos cerca del spawn del jugador (1,1) para facilitar
-# las pruebas sin caminar mucho. Verificado por codigo: conectividad
-# completa bombeando, y los 3 puntos de spawn de enemigos siguen en
-# la misma bolsa de vacias que el jugador. El mapa real del Nivel 1
-# (el "REDISENADO" de la Etapa 5) queda guardado comentado mas abajo
-# para restaurarlo una vez validada la Etapa 6.
-# ----------------------------------------------------------------
-mapa_nivel:
-    .word   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1
-    .word   1,  0,  0,1026,  0,  2,  0,  2,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,258,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,514,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,770,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,  0,  0,  0,  0,  0,  0,  0,  1,  0,  0,  0,  0,  0,  0,  1
-    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-    .word   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1
+mapa_nivel_1:
+    .word   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1
+    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
+    .word   1,  0,  1,258,  1,  0,  1,  2,  1,  0,  1,  0,  1
+    .word   1,  0,  2,  0,  0,  2,  0,  0,  0,  0,  0,  0,  1
+    .word   1,  0,  1,  0,  1,  2,  1,  0,  1,  0,  1,  0,  1
+    .word   1,  0,  0,770,  2,  0,  0,514,  0,  2,  0,  0,  1
+    .word   1,  0,  1,  0,  1,  0,  1,  2,  1,  0,  1,  0,  1
+    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  2,  1
+    .word   1,  0,  1,  0,  1,  0,  1,  2,  1,  0,  1,  0,  1
+    .word   1,  0,  2,  0,  2,  0,  0,  2,1026,  0,  0,  2,  1
+    .word   1,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1
+    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
+    .word   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1
 
-# --- Mapa real del Nivel 1 (rediseno de la Etapa 5, guardado para
-#     restaurar cuando se termine de validar la Etapa 6) ---
-# mapa_nivel:
-#     .word   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1
-#     .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-#     .word   1,  0,  1,  0,  1,  0,  1,  0,  1,  2,  1,  0,  1,  0,  1,  1
-#     .word   1,  0,  0,  0,258,  0,  0,  0,  0,  2,  0,  0,  2,  0,  0,  1
-#     .word   1,  0,  1,  0,  1,  0,  1,  0,  1,  0,  1,  2,  1,  0,  1,  1
-#     .word   1,  0,  0,  0,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  2,  1
-#     .word   1,  0,  1,  0,  1,  0,  1,  2,  1,  0,  1,  2,  1,  0,  1,  1
-#     .word   1,  0,  0,  0,  2,  0,  0,514,  2,  0,  2,  0,  2,  0,  0,  1
-#     .word   1,  0,  1,  0,  1,  0,  1,  2,  1,  2,  1,  0,  1,  0,  1,  1
-#     .word   1,  0,  0,  2,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
-#     .word   1,  0,  1,  2,  1,  0,  1,  2,  1,  2,  1,  2,  1,  0,  1,  1
-#     .word   1,  0,  0,  0,  0,770,  0,  0,  0,  0,  0,  0,  0,  0,  2,  1
-#     .word   1,  0,  1,  0,  1,  2,  1,  0,  1,  0,  1,  0,  1,  0,  1,  1
-#     .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  2,  0,  0,  0,  0,  1
-#     .word   1,  0,  1,  0,  1,  2,  1,  0,  1,  2,  1,1026,  1,  0,  1,  1
-#     .word   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1
+# Nivel 2: ~50% destructibles, 59 celdas vacias conectadas.
+# Power-ups: LLAMA (2,5), BOMBA_EXTRA (5,8), VIDA_EXTRA (7,2).
+# Salida oculta en (10,11).
+mapa_nivel_2:
+    .word   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1
+    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
+    .word   1,  0,  1,  2,  1,  0,  1,  0,  1,  0,  1,  0,  1
+    .word   1,  0,  2,  2,  2,  0,  0,  2,  0,  0,  0,  0,  1
+    .word   1,  0,  1,  0,  1,258,  1,  2,  1,  2,  1,  0,  1
+    .word   1,  0,  0,  0,  2,  2,  2,  2,514,  2,  0,  2,  1
+    .word   1,  0,  1,  2,  1,  2,  1,  0,  1,  2,  1,  0,  1
+    .word   1,  0,770,  2,  2,  0,  0,  0,  0,  0,  0,  2,  1
+    .word   1,  0,  1,  2,  1,  0,  1,  0,  1,  0,  1,  0,  1
+    .word   1,  0,  0,  0,  0,  0,  0,  2,  0,  0,  0,  0,  1
+    .word   1,  0,  1,  2,  1,  2,  1,  0,  1,  0,  1,1026,  1
+    .word   1,  0,  2,  0,  0,  0,  0,  2,  2,  0,  0,  0,  1
+    .word   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1
+
+# Nivel 3: ~60% destructibles (el mas dificil), 44 celdas vacias
+# conectadas. Power-ups: LLAMA (2,7), BOMBA_EXTRA (7,3),
+# VIDA_EXTRA (5,7). Salida oculta en (9,9).
+mapa_nivel_3:
+    .word   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1
+    .word   1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1
+    .word   1,  0,  1,  2,  1,  2,  1,258,  1,  2,  1,  0,  1
+    .word   1,  0,  2,  2,  2,  2,  2,  2,  2,  0,  0,  0,  1
+    .word   1,  0,  1,  2,  1,  2,  1,  0,  1,  0,  1,  2,  1
+    .word   1,  0,  2,  2,  2,  0,  2,770,  0,  0,  0,  2,  1
+    .word   1,  0,  1,  0,  1,  2,  1,  0,  1,  0,  1,  2,  1
+    .word   1,  0,  2,514,  2,  2,  2,  0,  0,  0,  0,  0,  1
+    .word   1,  0,  1,  2,  1,  0,  1,  0,  1,  0,  1,  0,  1
+    .word   1,  0,  2,  0,  2,  2,  2,  2,  2,1026,  0,  0,  1
+    .word   1,  0,  1,  2,  1,  0,  1,  0,  1,  0,  1,  0,  1
+    .word   1,  0,  2,  2,  0,  0,  2,  2,  0,  2,  0,  0,  1
+    .word   1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1
+
+
+# ----------------------------------------------------------------
+# Array de TRABAJO del mapa: toda la logica de juego existente
+# (celda_tipo, celda_set_tipo, celda_es_solida, pintar_mapa, etc.)
+# lee y escribe aqui. Se llena copiando el mapa fijo correspondiente
+# al nivel actual con cargar_nivel(). El contenido inicial (todo
+# INDESTRUCTIBLE, .word 1:169) es irrelevante: siempre se
+# sobreescribe completo antes de usarse, en main, antes del primer
+# pintar_mapa.
+# ----------------------------------------------------------------
+mapa_nivel: .word 1:169
+
+nivel_actual: .word 1    # nivel activo: 1, 2, o 3
 
 
 # ----------------------------------------------------------------
@@ -330,7 +430,10 @@ powerup_suelo_fila:   .word 0:8
 .text
 main:
     jal  limpiar_pantalla
+    jal  pintar_fondo_hud
+    jal  cargar_nivel
     jal  pintar_mapa
+    jal  pintar_hud_completo
 
     # Dibujar al jugador en su posicion inicial de spawn (fuera del
     # loop, se pinta una sola vez aqui; despues solo se redibuja
@@ -342,25 +445,7 @@ main:
     li   a4, TILE_SIZE
     jal  pintar_bloque_fb
 
-    # Spawn de enemigos del Nivel 1. *** MAPA DE PRUEBAS: solo el
-    # enemigo RECTO activo (el mas simple y predecible), para poder
-    # probar colisiones sin la variabilidad de los otros dos tipos.
-    # ALEATORIO y PERSEGUIDOR quedan comentados, listos para
-    # reactivar cuando se quiera volver a probar la IA completa. ***
-    li   a0, 14
-    li   a1, 3
-    li   a2, ENEMIGO_TIPO_RECTO
-    jal  spawn_enemigo
-
-    # li   a0, 1
-    # li   a1, 14
-    # li   a2, ENEMIGO_TIPO_ALEATORIO
-    # jal  spawn_enemigo
-
-    # li   a0, 13
-    # li   a1, 14
-    # li   a2, ENEMIGO_TIPO_PERSEGUIDOR
-    # jal  spawn_enemigo
+    jal  spawn_enemigos_del_nivel
 
 loop_principal:
     # --- Actualizaciones que corren TODOS los frames, con o sin
@@ -437,6 +522,19 @@ loop_principal_colisiones:
     # solo del jugador, no protege a los enemigos.
     jal  matar_enemigos_en_fuego
 
+    # Jugador vs salida: se chequea SIEMPRE, incluso si el jugador
+    # es invulnerable (avanzar de nivel no es una amenaza de la
+    # que haya que protegerse, asi que no debe bloquearse por eso).
+    jal  jugador_toco_salida
+    beqz a0, loop_principal_colisiones_no_salida
+
+    jal  nivel_limpio
+    beqz a0, loop_principal_colisiones_no_salida   # quedan enemigos vivos: la salida no funciona todavia
+
+    jal  avanzar_nivel
+    j    loop_principal_fin_de_vuelta
+
+loop_principal_colisiones_no_salida:
     jal  actualizar_invulnerabilidad
 
     lw   t0, jugador_invuln
@@ -481,6 +579,170 @@ limpiar_pantalla_loop:
     addi t0, t0, 4
     addi t1, t1, -1
     bnez t1, limpiar_pantalla_loop
+    ret
+
+
+# ================================================================
+# Funcion: pintar_fondo_hud
+# Pinta el fondo de las dos franjas de HUD (lateral derecha e
+# inferior) con sus colores distintivos. Se llama una vez al
+# inicio de cada nivel (main/avanzar_nivel), antes de pintar el
+# contenido real del HUD encima.
+# Parametros: ninguno
+# Retorno: void
+# ================================================================
+pintar_fondo_hud:
+    addi sp, sp, -4
+    sw   ra, 0(sp)
+
+    # Franja lateral derecha: desde (HUD_COL_INICIO_FB, 0) hasta
+    # el borde de la pantalla (FB_UNIDADES_LADO), por toda la
+    # altura de la pantalla (incluye la esquina inferior derecha).
+    li   a0, HUD_COL_INICIO_FB
+    li   a1, 0
+    li   a2, COLOR_HUD_FONDO_LATERAL
+    li   a3, HUD_ANCHO_TILES
+    slli a3, a3, TILE_SHIFT       # ancho en tiles -> fb-unidades
+    li   a4, FB_UNIDADES_LADO
+    jal  pintar_bloque_fb
+
+    # Franja inferior: desde (0, HUD_FILA_INICIO_FB) hasta el
+    # borde derecho del AREA DE MAPA solamente (no se solapa con
+    # la franja lateral, que ya cubrio esa esquina arriba).
+    li   a0, 0
+    li   a1, HUD_FILA_INICIO_FB
+    li   a2, COLOR_HUD_FONDO_INFERIOR
+    li   a3, HUD_COL_INICIO_FB     # ancho: justo hasta donde empieza la franja lateral
+    li   a4, HUD_ANCHO_TILES
+    slli a4, a4, TILE_SHIFT
+    jal  pintar_bloque_fb
+
+    lw   ra, 0(sp)
+    addi sp, sp, 4
+    ret
+
+
+# ================================================================
+# Funcion: pintar_contador_hud
+# Dibuja "cantidad" cuadraditos de HUD_CUADRADITO fb-unidades de
+# lado, en filas de HUD_CUADRADITOS_POR_FILA, empezando en
+# (HUD_COL_INICIO_FB + HUD_MARGEN_IZQ, fila_inicio_fb) dentro de
+# la franja lateral. Antes de dibujar, borra el area completa que
+# podria haber ocupado el maximo posible de esa categoria (con
+# COLOR_HUD_FONDO_LATERAL), para que bajar el conteo (por ejemplo
+# perder una vida) borre correctamente los cuadraditos sobrantes
+# en vez de dejarlos pegados.
+# Parametros:
+#   a0: cantidad de cuadraditos a mostrar
+#   a1: fila de inicio (fb-unidad, relativa al inicio de pantalla)
+#   a2: color de los cuadraditos
+#   a3: maximo posible de esta categoria (para saber cuanto borrar)
+# Retorno: void
+# ================================================================
+pintar_contador_hud:
+    addi sp, sp, -24
+    sw   ra, 0(sp)
+    sw   s0, 4(sp)    # cantidad a mostrar
+    sw   s1, 8(sp)    # fila de inicio
+    sw   s2, 12(sp)   # color
+    sw   s3, 16(sp)   # maximo (para calcular cuanto borrar)
+    sw   s4, 20(sp)   # indice de cuadradito actual (0-based)
+
+    mv   s0, a0
+    mv   s1, a1
+    mv   s2, a2
+    mv   s3, a3
+
+    # Borrar el area completa reservada para el maximo de esta
+    # categoria (todas las filas que el maximo podria necesitar),
+    # antes de dibujar los cuadraditos reales.
+    addi t0, s3, HUD_CUADRADITOS_POR_FILA
+    addi t0, t0, -1
+    li   t1, HUD_CUADRADITOS_POR_FILA
+    div  t0, t0, t1          # filas necesarias para el MAXIMO de esta categoria
+    li   t1, HUD_CUADRADITO
+    mul  t0, t0, t1          # alto en fb-unidades a borrar
+
+    li   a0, HUD_COL_INICIO_FB
+    addi a0, a0, HUD_MARGEN_IZQ
+    mv   a1, s1
+    li   a2, COLOR_HUD_FONDO_LATERAL
+    li   a3, HUD_CUADRADITOS_POR_FILA
+    li   t1, HUD_CUADRADITO
+    mul  a3, a3, t1
+    mv   a4, t0
+    jal  pintar_bloque_fb
+
+    li   s4, 0
+
+pintar_contador_hud_loop:
+    bge  s4, s0, pintar_contador_hud_fin
+
+    li   t0, HUD_CUADRADITOS_POR_FILA
+    rem  t1, s4, t0          # columna dentro de la fila (0..POR_FILA-1)
+    div  t2, s4, t0          # numero de fila (0-based)
+
+    li   t3, HUD_CUADRADITO
+    mul  t1, t1, t3          # offset x del cuadradito, en fb-unidades
+    li   a0, HUD_COL_INICIO_FB
+    addi a0, a0, HUD_MARGEN_IZQ
+    add  a0, a0, t1
+
+    mul  t2, t2, t3          # offset y del cuadradito
+    add  a1, s1, t2
+
+    mv   a2, s2
+    li   a3, HUD_CUADRADITO
+    li   a4, HUD_CUADRADITO
+    jal  pintar_bloque_fb
+
+    addi s4, s4, 1
+    j    pintar_contador_hud_loop
+
+pintar_contador_hud_fin:
+    lw   s4, 20(sp)
+    lw   s3, 16(sp)
+    lw   s2, 12(sp)
+    lw   s1, 8(sp)
+    lw   s0, 4(sp)
+    lw   ra, 0(sp)
+    addi sp, sp, 24
+    ret
+
+
+# ================================================================
+# Funcion: pintar_hud_completo
+# Redibuja las 3 categorias del HUD lateral (vidas, rango, bombas)
+# con los valores actuales del jugador. Se llama cada vez que
+# alguno de esos valores puede haber cambiado (perder/ganar vida,
+# recoger powerup de rango o bomba extra).
+# Parametros: ninguno (lee jugador_vidas/jugador_rango/jugador_max_bombas)
+# Retorno: void
+# ================================================================
+pintar_hud_completo:
+    addi sp, sp, -4
+    sw   ra, 0(sp)
+
+    lw   a0, jugador_vidas
+    li   a1, HUD_VIDAS_FILA_INICIO_FB
+    li   a2, COLOR_POWERUP_VIDA_EXTRA
+    li   a3, JUGADOR_VIDAS_TOPE
+    jal  pintar_contador_hud
+
+    lw   a0, jugador_rango
+    li   a1, HUD_RANGO_FILA_INICIO_FB
+    li   a2, COLOR_POWERUP_LLAMA
+    li   a3, JUGADOR_RANGO_TOPE
+    jal  pintar_contador_hud
+
+    lw   a0, jugador_max_bombas
+    li   a1, HUD_BOMBAS_FILA_INICIO_FB
+    li   a2, COLOR_POWERUP_BOMBA_EXTRA
+    li   a3, JUGADOR_MAX_BOMBAS_TOPE
+    jal  pintar_contador_hud
+
+    lw   ra, 0(sp)
+    addi sp, sp, 4
     ret
 
 
@@ -623,6 +885,70 @@ pintar_bloque_tiles:
 
     lw   ra, 0(sp)
     addi sp, sp, 4
+    ret
+
+
+# ================================================================
+# Funcion: pintar_sprite_16
+# Pinta un sprite con textura de 4x4 fb-unidades (= 1 tile de
+# 32x32px reales) en la celda de tile dada, leyendo los 16 colores
+# de una tabla en memoria (fila por fila, igual orden que
+# sprite_indestructible/sprite_destructible).
+# Parametros:
+#   a0: columna de tile
+#   a1: fila de tile
+#   a2: direccion de la tabla de 16 words (colores)
+# Retorno: void
+# ================================================================
+pintar_sprite_16:
+    addi sp, sp, -28
+    sw   ra, 0(sp)
+    sw   s0, 4(sp)    # x base del tile, en fb-unidades
+    sw   s1, 8(sp)    # y base del tile, en fb-unidades
+    sw   s2, 12(sp)   # direccion de la tabla (avanza 4 bytes por color leido)
+    sw   s3, 16(sp)   # fila actual dentro del sprite (0..3)
+    sw   s4, 20(sp)   # columna actual dentro del sprite (0..3)
+    sw   s5, 24(sp)   # color leido de la tabla
+
+    slli s0, a0, TILE_SHIFT
+    slli s1, a1, TILE_SHIFT
+    mv   s2, a2
+    li   s3, 0
+
+pintar_sprite_16_fila:
+    li   t0, 4
+    bge  s3, t0, pintar_sprite_16_fin
+
+    li   s4, 0
+
+pintar_sprite_16_col:
+    li   t0, 4
+    bge  s4, t0, pintar_sprite_16_col_fin
+
+    lw   s5, 0(s2)
+
+    add  a0, s0, s4
+    add  a1, s1, s3
+    mv   a2, s5
+    jal  pintar_unidad
+
+    addi s2, s2, 4
+    addi s4, s4, 1
+    j    pintar_sprite_16_col
+
+pintar_sprite_16_col_fin:
+    addi s3, s3, 1
+    j    pintar_sprite_16_fila
+
+pintar_sprite_16_fin:
+    lw   s5, 24(sp)
+    lw   s4, 20(sp)
+    lw   s3, 16(sp)
+    lw   s2, 12(sp)
+    lw   s1, 8(sp)
+    lw   s0, 4(sp)
+    lw   ra, 0(sp)
+    addi sp, sp, 28
     ret
 
 
@@ -846,7 +1172,7 @@ powerup_suelo_en_celda_fin:
 # ================================================================
 # Funcion: color_de_powerup_suelo
 # Parametros:
-#   a0: tipo de power-up (POWERUP_LLAMA, POWERUP_BOMBA_EXTRA, POWERUP_PATIN)
+#   a0: tipo de power-up (POWERUP_LLAMA, POWERUP_BOMBA_EXTRA, POWERUP_VIDA_EXTRA)
 # Retorno:
 #   a0: color
 # ================================================================
@@ -856,7 +1182,7 @@ color_de_powerup_suelo:
     li   t0, POWERUP_BOMBA_EXTRA
     beq  a0, t0, color_de_powerup_suelo_bomba
 
-    li   a0, COLOR_POWERUP_PATIN
+    li   a0, COLOR_POWERUP_VIDA_EXTRA
     ret
 
 color_de_powerup_suelo_llama:
@@ -902,8 +1228,28 @@ redibujar_celda:
     mv   a0, s0
     mv   a1, s1
     jal  celda_tipo
+
+    li   t0, CELDA_INDESTRUCTIBLE
+    beq  a0, t0, redibujar_celda_sprite_indestructible
+    li   t0, CELDA_DESTRUCTIBLE
+    beq  a0, t0, redibujar_celda_sprite_destructible
+
     jal  celda_color
     j    redibujar_celda_pintar
+
+redibujar_celda_sprite_indestructible:
+    la   a2, sprite_indestructible
+    mv   a0, s0
+    mv   a1, s1
+    jal  pintar_sprite_16
+    j    redibujar_celda_fin
+
+redibujar_celda_sprite_destructible:
+    la   a2, sprite_destructible
+    mv   a0, s0
+    mv   a1, s1
+    jal  pintar_sprite_16
+    j    redibujar_celda_fin
 
 redibujar_celda_jugador:
     li   a0, COLOR_JUGADOR
@@ -926,10 +1272,116 @@ redibujar_celda_pintar:
     li   a4, 1
     jal  pintar_bloque_tiles
 
+redibujar_celda_fin:
     lw   s1, 8(sp)
     lw   s0, 4(sp)
     lw   ra, 0(sp)
     addi sp, sp, 12
+    ret
+
+
+# ================================================================
+# Funcion: cargar_nivel
+# Copia el mapa fijo correspondiente a nivel_actual (1, 2, o 3)
+# dentro del array de trabajo mapa_nivel, y limpia las tablas de
+# entidades transitorias del nivel anterior (bombas, explosiones,
+# power-ups en el suelo, enemigos) -- estas SIEMPRE se reinician
+# entre niveles, a diferencia del estado del jugador (vidas,
+# rango, max_bombas), que segun diseno persiste entre niveles y
+# esta funcion NO toca.
+# Parametros: ninguno (lee nivel_actual)
+# Retorno: void
+# ================================================================
+cargar_nivel:
+    addi sp, sp, -8
+    sw   ra, 0(sp)
+    sw   s0, 4(sp)   # direccion del mapa fijo a copiar
+
+    lw   t0, nivel_actual
+    li   t1, 1
+    beq  t0, t1, cargar_nivel_uno
+    li   t1, 2
+    beq  t0, t1, cargar_nivel_dos
+
+    la   s0, mapa_nivel_3
+    j    cargar_nivel_copiar
+
+cargar_nivel_uno:
+    la   s0, mapa_nivel_1
+    j    cargar_nivel_copiar
+
+cargar_nivel_dos:
+    la   s0, mapa_nivel_2
+
+cargar_nivel_copiar:
+    la   t0, mapa_nivel
+    li   t1, MAPA_FILAS
+    li   t2, MAPA_COLUMNAS
+    mul  t1, t1, t2        # total de celdas = MAPA_FILAS * MAPA_COLUMNAS
+
+cargar_nivel_copiar_loop:
+    beqz t1, cargar_nivel_limpiar_entidades
+
+    lw   t2, 0(s0)
+    sw   t2, 0(t0)
+    addi s0, s0, 4
+    addi t0, t0, 4
+    addi t1, t1, -1
+    j    cargar_nivel_copiar_loop
+
+cargar_nivel_limpiar_entidades:
+    # Bombas
+    la   t0, bomba_activa
+    li   t1, MAX_BOMBAS
+cargar_nivel_limpiar_bombas:
+    beqz t1, cargar_nivel_limpiar_explosiones
+    sw   zero, 0(t0)
+    addi t0, t0, 4
+    addi t1, t1, -1
+    j    cargar_nivel_limpiar_bombas
+
+cargar_nivel_limpiar_explosiones:
+    la   t0, explosion_activa
+    li   t1, MAX_EXPLOSIONES
+cargar_nivel_limpiar_explosiones_loop:
+    beqz t1, cargar_nivel_limpiar_powerups
+    sw   zero, 0(t0)
+    addi t0, t0, 4
+    addi t1, t1, -1
+    j    cargar_nivel_limpiar_explosiones_loop
+
+cargar_nivel_limpiar_powerups:
+    la   t0, powerup_suelo_activo
+    li   t1, MAX_POWERUPS_SUELO
+cargar_nivel_limpiar_powerups_loop:
+    beqz t1, cargar_nivel_limpiar_enemigos
+    sw   zero, 0(t0)
+    addi t0, t0, 4
+    addi t1, t1, -1
+    j    cargar_nivel_limpiar_powerups_loop
+
+cargar_nivel_limpiar_enemigos:
+    la   t0, enemigo_activo
+    li   t1, MAX_ENEMIGOS
+cargar_nivel_limpiar_enemigos_loop:
+    beqz t1, cargar_nivel_reset_jugador_bombas
+    sw   zero, 0(t0)
+    addi t0, t0, 4
+    addi t1, t1, -1
+    j    cargar_nivel_limpiar_enemigos_loop
+
+cargar_nivel_reset_jugador_bombas:
+    # jugador_bombas_activas debe volver a 0: las bombas del nivel
+    # anterior ya no existen (se acaban de borrar arriba), asi que
+    # el contador de "bombas propias colocadas ahora mismo" tiene
+    # que reflejarlo, aunque jugador_max_bombas (el LIMITE, que si
+    # persiste como powerup acumulado) no se toca.
+    la   t0, jugador_bombas_activas
+    sw   zero, 0(t0)
+
+    lw   s0, 4(sp)
+    lw   ra, 0(sp)
+    addi sp, sp, 8
     ret
 
 
@@ -939,53 +1391,44 @@ redibujar_celda_pintar:
 # Retorno: void
 # ================================================================
 pintar_mapa:
-    addi sp, sp, -20
+    addi sp, sp, -12
     sw   ra, 0(sp)
-    sw   s0, 4(sp)
-    sw   s1, 8(sp)
-    sw   s2, 12(sp)
-    sw   s3, 16(sp)
+    sw   s0, 4(sp)   # fila actual
+    sw   s1, 8(sp)   # columna actual
 
-    la   s0, mapa_nivel
-    li   s1, 0
+    li   s0, 0
 
 pintar_mapa_fila:
     li   t0, MAPA_FILAS
-    bge  s1, t0, pintar_mapa_fin
+    bge  s0, t0, pintar_mapa_fin
 
-    li   s2, 0
+    li   s1, 0
 
 pintar_mapa_col:
     li   t0, MAPA_COLUMNAS
-    bge  s2, t0, pintar_mapa_col_fin
+    bge  s1, t0, pintar_mapa_col_fin
 
-    lw   s3, 0(s0)
+    # Reutiliza redibujar_celda (que ya sabe elegir sprite con
+    # textura para INDESTRUCTIBLE/DESTRUCTIBLE, o color plano para
+    # el resto) en vez de duplicar esa logica aqui. Al pintar el
+    # mapa inicial no hay jugador/enemigo/power-up en ninguna celda
+    # todavia, asi que siempre cae en la rama de terreno.
+    mv   a0, s1
+    mv   a1, s0
+    jal  redibujar_celda
 
-    mv   a0, s3
-    jal  celda_color
-
-    mv   a2, a0
-    mv   a0, s2
-    mv   a1, s1
-    li   a3, 1
-    li   a4, 1
-    jal  pintar_bloque_tiles
-
-    addi s0, s0, 4
-    addi s2, s2, 1
+    addi s1, s1, 1
     j    pintar_mapa_col
 
 pintar_mapa_col_fin:
-    addi s1, s1, 1
+    addi s0, s0, 1
     j    pintar_mapa_fila
 
 pintar_mapa_fin:
-    lw   s3, 16(sp)
-    lw   s2, 12(sp)
     lw   s1, 8(sp)
     lw   s0, 4(sp)
     lw   ra, 0(sp)
-    addi sp, sp, 20
+    addi sp, sp, 12
     ret
 
 
@@ -1005,7 +1448,8 @@ celda_es_solida:
     li    t2, MAPA_FILAS
     bge   a1, t2, celda_es_solida_si
 
-    slli  t0, a1, MAPA_COL_SHIFT
+    li    t0, MAPA_COLUMNAS
+    mul   t0, a1, t0
     add   t0, t0, a0
     slli  t0, t0, 2
     la    t1, mapa_nivel
@@ -1294,7 +1738,8 @@ colocar_bomba_fin:
 #   a0: tipo de celda (bits bajos de la word, 0-255)
 # ================================================================
 celda_tipo:
-    slli t0, a1, MAPA_COL_SHIFT
+    li   t0, MAPA_COLUMNAS
+    mul  t0, a1, t0
     add  t0, t0, a0
     slli t0, t0, 2
     la   t1, mapa_nivel
@@ -1313,7 +1758,8 @@ celda_tipo:
 #   a0: power-up oculto (0-255)
 # ================================================================
 celda_powerup_oculto:
-    slli t0, a1, MAPA_COL_SHIFT
+    li   t0, MAPA_COLUMNAS
+    mul  t0, a1, t0
     add  t0, t0, a0
     slli t0, t0, 2
     la   t1, mapa_nivel
@@ -1333,7 +1779,8 @@ celda_powerup_oculto:
 # Retorno: void
 # ================================================================
 celda_set_tipo:
-    slli t0, a1, MAPA_COL_SHIFT
+    li   t0, MAPA_COLUMNAS
+    mul  t0, a1, t0
     add  t0, t0, a0
     slli t0, t0, 2
     la   t1, mapa_nivel
@@ -1466,7 +1913,7 @@ marcar_explosion_revela_salida_fin:
 # Parametros:
 #   a0: columna de tile
 #   a1: fila de tile
-#   a2: tipo de power-up (POWERUP_LLAMA, POWERUP_BOMBA_EXTRA, o POWERUP_PATIN)
+#   a2: tipo de power-up (POWERUP_LLAMA, POWERUP_BOMBA_EXTRA, o POWERUP_VIDA_EXTRA)
 # Retorno: void
 # ================================================================
 marcar_explosion_revela_powerup:
@@ -1918,6 +2365,70 @@ jugador_toco_explosion_si:
 
 
 # ================================================================
+# Funcion: jugador_toco_salida
+# Verifica si la celda de tile donde esta parado el jugador
+# actualmente es CELDA_SALIDA (la salida ya revelada del nivel).
+# Parametros: ninguno (lee jugador_x/jugador_y)
+# Retorno:
+#   a0: 1 si la celda del jugador es CELDA_SALIDA, 0 si no
+# ================================================================
+jugador_toco_salida:
+    lw   t0, jugador_x
+    srai a0, t0, TILE_SHIFT
+    lw   t0, jugador_y
+    srai a1, t0, TILE_SHIFT
+
+    addi sp, sp, -4
+    sw   ra, 0(sp)
+    jal  celda_tipo
+    lw   ra, 0(sp)
+    addi sp, sp, 4
+
+    li   t0, CELDA_SALIDA
+    beq  a0, t0, jugador_toco_salida_si
+
+    li   a0, 0
+    ret
+
+jugador_toco_salida_si:
+    li   a0, 1
+    ret
+
+
+# ================================================================
+# Funcion: nivel_limpio
+# Verifica si NINGUN enemigo esta vivo (todos los slots de la
+# tabla enemigo_activo en 0). Requisito clasico de Bomberman: la
+# salida solo funciona cuando el nivel esta "limpio".
+# Parametros: ninguno
+# Retorno:
+#   a0: 1 si no queda ningun enemigo vivo, 0 si queda al menos uno
+# ================================================================
+nivel_limpio:
+    la   t0, enemigo_activo
+    li   t1, 0
+
+nivel_limpio_loop:
+    li   t2, MAX_ENEMIGOS
+    bge  t1, t2, nivel_limpio_si
+
+    lw   t3, 0(t0)
+    bnez t3, nivel_limpio_no
+
+    addi t0, t0, 4
+    addi t1, t1, 1
+    j    nivel_limpio_loop
+
+nivel_limpio_si:
+    li   a0, 1
+    ret
+
+nivel_limpio_no:
+    li   a0, 0
+    ret
+
+
+# ================================================================
 # Funcion: perder_vida
 # Parametros: ninguno
 # Retorno: void
@@ -1961,6 +2472,8 @@ perder_vida:
     li   a0, SPAWN_COL
     li   a1, SPAWN_FILA
     jal  redibujar_celda
+
+    jal  pintar_hud_completo
 
     j    perder_vida_fin
 
@@ -2441,6 +2954,112 @@ spawn_enemigo_fin:
 
 
 # ================================================================
+# Funcion: spawn_enemigos_del_nivel
+# Crea los 3 enemigos (uno de cada tipo) en sus posiciones de
+# spawn fijas. Las mismas 3 coordenadas (col,fila) son validas
+# para los 3 niveles: se verifico por codigo, al generar cada
+# mapa, que esas celdas caen en CELDA_VACIA y en la misma
+# componente conectada que el spawn del jugador. Se llama tanto
+# desde main (nivel 1 inicial) como desde avanzar_nivel (nivel
+# 2 y 3).
+# Parametros: ninguno
+# Retorno: void
+# ================================================================
+spawn_enemigos_del_nivel:
+    addi sp, sp, -4
+    sw   ra, 0(sp)
+
+    # Coordenadas (col,fila) para el mapa 13x13 (vuelto de 14x14).
+    # Verificadas por codigo al generar los 3 mapas: caen en
+    # CELDA_VACIA y en la misma componente conectada que el spawn
+    # del jugador (1,1), en los 3 niveles.
+    li   a0, 11
+    li   a1, 3
+    li   a2, ENEMIGO_TIPO_RECTO
+    jal  spawn_enemigo
+
+    li   a0, 1
+    li   a1, 11
+    li   a2, ENEMIGO_TIPO_ALEATORIO
+    jal  spawn_enemigo
+
+    li   a0, 10
+    li   a1, 11
+    li   a2, ENEMIGO_TIPO_PERSEGUIDOR
+    jal  spawn_enemigo
+
+    lw   ra, 0(sp)
+    addi sp, sp, 4
+    ret
+
+
+# ================================================================
+# Funcion: avanzar_nivel
+# Se llama cuando el jugador pisa la salida con el nivel limpio de
+# enemigos. Incrementa nivel_actual; si ya se completo el nivel 3,
+# es VICTORIA (fin del juego, distinto de game over -- por ahora
+# tambien salta a fin_programa, igual que perder_vida cuando se
+# acaban las vidas; una pantalla de victoria real queda para la
+# etapa de pulido). Si quedan niveles, carga el mapa siguiente,
+# limpia bombas/explosiones/powerups/enemigos del nivel anterior
+# (via cargar_nivel), reposiciona al jugador en el spawn, y
+# redibuja todo. Las vidas, rango, y max_bombas del jugador NO se
+# tocan: persisten entre niveles segun lo decidido.
+# Parametros: ninguno
+# Retorno: void
+# ================================================================
+avanzar_nivel:
+    addi sp, sp, -4
+    sw   ra, 0(sp)
+
+    lw   t0, nivel_actual
+    li   t1, 3
+    bge  t0, t1, avanzar_nivel_victoria
+
+    addi t0, t0, 1
+    la   t1, nivel_actual
+    sw   t0, 0(t1)
+
+    jal  cargar_nivel
+
+    # Reposicionar al jugador en el spawn del nuevo nivel
+    li   t0, SPAWN_COL
+    slli t0, t0, TILE_SHIFT
+    la   t1, jugador_x
+    sw   t0, 0(t1)
+
+    li   t0, SPAWN_FILA
+    slli t0, t0, TILE_SHIFT
+    la   t1, jugador_y
+    sw   t0, 0(t1)
+
+    jal  limpiar_pantalla
+    jal  pintar_fondo_hud
+    jal  pintar_mapa
+    jal  pintar_hud_completo
+
+    lw   a0, jugador_x
+    lw   a1, jugador_y
+    li   a2, COLOR_JUGADOR
+    li   a3, TILE_SIZE
+    li   a4, TILE_SIZE
+    jal  pintar_bloque_fb
+
+    jal  spawn_enemigos_del_nivel
+
+    lw   ra, 0(sp)
+    addi sp, sp, 4
+    ret
+
+avanzar_nivel_victoria:
+    # Salto directo a fin_programa, mismo patron que
+    # perder_vida_juego_terminado: es seguro porque fin_programa
+    # es un loop infinito que nunca retorna, asi que no importa
+    # que el stack frame de avanzar_nivel quede sin desenrollar.
+    j    fin_programa
+
+
+# ================================================================
 # Funcion: jugador_toco_enemigo
 # Parametros: ninguno (lee jugador_x/jugador_y)
 # Retorno:
@@ -2567,7 +3186,7 @@ parpadear_jugador_fin:
 # Parametros:
 #   a0: columna de tile
 #   a1: fila de tile
-#   a2: tipo de power-up (POWERUP_LLAMA, POWERUP_BOMBA_EXTRA, o POWERUP_PATIN)
+#   a2: tipo de power-up (POWERUP_LLAMA, POWERUP_BOMBA_EXTRA, o POWERUP_VIDA_EXTRA)
 # Retorno: void
 # ================================================================
 crear_powerup_suelo:
@@ -2645,6 +3264,8 @@ recolectar_powerups:
     beq  a1, t0, recolectar_powerups_llama
     li   t0, POWERUP_BOMBA_EXTRA
     beq  a1, t0, recolectar_powerups_bomba_extra
+    li   t0, POWERUP_VIDA_EXTRA
+    beq  a1, t0, recolectar_powerups_vida_extra
     j    recolectar_powerups_eliminar
 
 recolectar_powerups_llama:
@@ -2663,11 +3284,22 @@ recolectar_powerups_bomba_extra:
     addi t0, t0, 1
     la   t1, jugador_max_bombas
     sw   t0, 0(t1)
+    j    recolectar_powerups_eliminar
+
+recolectar_powerups_vida_extra:
+    lw   t0, jugador_vidas
+    li   t1, JUGADOR_VIDAS_TOPE
+    bge  t0, t1, recolectar_powerups_eliminar
+    addi t0, t0, 1
+    la   t1, jugador_vidas
+    sw   t0, 0(t1)
 
 recolectar_powerups_eliminar:
     mv   a0, s0
     mv   a1, s1
     jal  eliminar_powerup_suelo
+
+    jal  pintar_hud_completo
 
 recolectar_powerups_fin:
     lw   s1, 8(sp)
