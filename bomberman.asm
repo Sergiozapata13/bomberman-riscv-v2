@@ -67,37 +67,54 @@
 .eqv MAPA_FILAS              13    # tiles jugables de alto (idem)
 
 # ----------------------------------------------------------------
-# Franja de HUD (Etapa 8): 3 tiles de ancho a la derecha del mapa,
-# 3 tiles de alto debajo. Con MAPA_COLUMNAS/FILAS=13 y
-# FB_UNIDADES_LADO=64, el mapa ocupa 13*4=52 fb-unidades; quedan
-# 64-52=12 fb-unidades (3 tiles) de HUD en cada franja.
+# Layout de pantalla (Etapa 8, v2): el mapa jugable (13x13 tiles =
+# 52x52 fb-unidades) ya no ocupa la esquina superior izquierda del
+# framebuffer de 64x64. Se centra horizontalmente (sobra
+# 64-52=12 fb-unidades, 6 de margen a cada lado) y se desplaza 1
+# tile hacia abajo (PANTALLA_OFFSET_Y=4), dejando una unica franja
+# de HUD a todo lo ancho (64 fb-unidades) en la parte inferior, de
+# 64-4-52=8 fb-unidades (64px) de alto. Ya no existe franja lateral.
+#
+# PANTALLA_OFFSET_X/Y se suman dentro de calcular_posicion_fb a
+# TODAS las coordenadas de dibujo del mapa/jugador/enemigos/sprites,
+# que se siguen calculando en las mismas coordenadas "de mapa" de
+# siempre (0..51). El HUD, en cambio, se dibuja en coordenadas
+# absolutas de pantalla (sin offset): pintar_fondo_hud y
+# pintar_contador_hud ponen pantalla_offset_x/y en 0 antes de
+# dibujar y los restauran despues (ver esas funciones).
 # ----------------------------------------------------------------
-.eqv HUD_COL_INICIO_FB       52    # fb-unidad x donde empieza la franja lateral derecha
-.eqv HUD_FILA_INICIO_FB      52    # fb-unidad y donde empieza la franja inferior
-.eqv HUD_ANCHO_TILES          3    # ancho de la franja lateral, en tiles
-.eqv COLOR_HUD_FONDO_LATERAL 0x000A2318  # verde muy oscuro, fondo de la franja lateral
-.eqv COLOR_HUD_FONDO_INFERIOR 0x002A170A # marron muy oscuro, fondo de la franja inferior
+.eqv PANTALLA_OFFSET_X        6    # (64 - MAPA_COLUMNAS*TILE_SIZE) / 2 = (64-52)/2 = 6
+.eqv PANTALLA_OFFSET_Y        4    # 1 tile hacia abajo = TILE_SIZE
+
+.eqv HUD_FILA_INICIO_FB      56    # fb-unidad y (absoluta) donde empieza la franja de HUD:
+                                    # PANTALLA_OFFSET_Y + MAPA_FILAS*TILE_SIZE = 4+52 = 56
+.eqv HUD_ALTO_FB               8   # alto de la franja de HUD = 64 - HUD_FILA_INICIO_FB
+.eqv COLOR_HUD_FONDO_INFERIOR 0x002A170A # marron muy oscuro, fondo de la franja de HUD
 
 # ----------------------------------------------------------------
-# Contenido del HUD lateral: contadores de vidas/rango/bombas como
-# cuadraditos (Etapa 8). Cada cuadradito ocupa HUD_CUADRADITO
-# fb-unidades de lado; HUD_CUADRADITOS_POR_FILA caben en el ancho
-# de la franja lateral (HUD_ANCHO_TILES*TILE_SIZE=8 fb-unidades).
+# Contenido del HUD: contadores de vidas/rango/bombas como
+# cuadraditos (Etapa 8), ahora en 3 columnas horizontales dentro de
+# la unica franja inferior (a todo lo ancho, 64 fb-unidades) en vez
+# de apilados verticalmente en una franja lateral. Cada cuadradito
+# ocupa HUD_CUADRADITO fb-unidades de lado.
 # ----------------------------------------------------------------
 .eqv HUD_CUADRADITO             2   # lado de cada cuadradito, en fb-unidades (16px)
-.eqv HUD_CUADRADITOS_POR_FILA   4   # cuantos caben por fila en el ancho de la franja lateral
-.eqv HUD_MARGEN_IZQ             0   # margen entre el borde de la franja y el primer cuadradito.
-                                    # Debe ser 0: HUD_CUADRADITOS_POR_FILA(4) * HUD_CUADRADITO(2)
-                                    # = 8 fb-unidades = exactamente el ancho de la franja lateral
-                                    # (HUD_ANCHO_TILES*TILE_SIZE=8) -- cualquier margen > 0 hace
-                                    # que la ultima columna de cuadraditos se salga del
-                                    # framebuffer (bug encontrado y corregido: con margen=1 el
-                                    # calculo daba x_max=65, uno mas alla del limite de 64
-                                    # fb-unidades del framebuffer).
 
-.eqv HUD_VIDAS_FILA_INICIO_FB   2   # fila (relativa al inicio de la franja) donde arrancan los cuadraditos de vidas
-.eqv HUD_RANGO_FILA_INICIO_FB  10   # idem para rango
-.eqv HUD_BOMBAS_FILA_INICIO_FB 16   # idem para bombas
+# Las 3 columnas (vidas | rango | bombas) reparten las 64
+# fb-unidades de ancho: 22+21+21=64. Dentro de cada columna los
+# cuadraditos se dibujan en una sola fila (con tope 9/5/8 caben
+# holgadamente: 9*2=18<=22, 5*2=10<=21, 8*2=16<=21), centrados
+# verticalmente en la franja de HUD_ALTO_FB(8) fb-unidades de alto.
+.eqv HUD_COL_VIDAS_INICIO_FB    0   # columna vidas: fb-unidad x donde empieza
+.eqv HUD_COL_VIDAS_ANCHO       22
+.eqv HUD_COL_RANGO_INICIO_FB   22   # columna rango
+.eqv HUD_COL_RANGO_ANCHO       21
+.eqv HUD_COL_BOMBAS_INICIO_FB  43   # columna bombas
+.eqv HUD_COL_BOMBAS_ANCHO      21
+
+.eqv HUD_CUADRADITO_FILA_FB     3   # fila (offset dentro de la franja) donde se dibuja la
+                                    # unica fila de cuadraditos: centrado verticalmente en
+                                    # HUD_ALTO_FB(8): (8-HUD_CUADRADITO(2))/2 = 3
 
 .eqv HITBOX_SIZE               4   # hitbox del jugador/enemigos = TILE_SIZE completo (sin margen).
                                     # NOTA: originalmente se probo un hitbox reducido (2, con
@@ -205,13 +222,51 @@
 .eqv COLOR_LADRILLO_CLARO  0x00C85A00   # cuerpo del ladrillo en el sprite destructible
 .eqv COLOR_MORTERO         0x00703300   # lineas de mortero entre ladrillos
 .eqv COLOR_AMARILLO      0x00FFD000   # salida / detalles
-.eqv COLOR_JUGADOR       0x0000FFFF   # cian, temporal para checkpoint visual
+.eqv COLOR_JUGADOR       0x0000FFFF   # cian, color base del sprite del jugador (Etapa de pulido visual)
+.eqv COLOR_JUGADOR_OSCURO 0x000088AA  # borde/sombra del sprite del jugador, da volumen
+.eqv COLOR_JUGADOR_OJO    0x00FFFFFF  # "ojos" blancos del sprite del jugador
 .eqv COLOR_ENEMIGO_RECTO       0x00FF00A0   # rosa/magenta
+.eqv COLOR_ENEMIGO_RECTO_OSCURO 0x00B00070  # sombra del sprite del enemigo recto
 .eqv COLOR_ENEMIGO_ALEATORIO   0x00A000FF   # violeta
+.eqv COLOR_ENEMIGO_ALEATORIO_OSCURO 0x006000A0  # sombra del sprite del enemigo aleatorio
 .eqv COLOR_ENEMIGO_PERSEGUIDOR 0x00804000   # marron
+.eqv COLOR_ENEMIGO_PERSEGUIDOR_OSCURO 0x00502800  # sombra del sprite del enemigo perseguidor
+.eqv COLOR_ENEMIGO_OJO    0x00000000  # "ojos" negros, comun a los 3 sprites de enemigo
+.eqv COLOR_ENEMIGO_COLMILLO 0x00FFFFFF  # colmillos blancos del sprite del enemigo perseguidor
 .eqv COLOR_POWERUP_LLAMA       0x00FFEE33   # amarillo claro
-.eqv COLOR_POWERUP_BOMBA_EXTRA 0x0033CCFF   # celeste
-.eqv COLOR_POWERUP_VIDA_EXTRA  0x0033FF66   # verde -- da una vida extra al recogerlo
+.eqv COLOR_POWERUP_LLAMA_OSCURO 0x00FF8800  # naranja, cuerpo de la gota de fuego del sprite
+.eqv COLOR_POWERUP_BOMBA_EXTRA 0x0033CCFF   # celeste (brillo central del sprite de bombita)
+.eqv COLOR_POWERUP_BOMBA_EXTRA_OSCURO 0x000066AA  # azul, cuerpo del sprite de bombita
+.eqv COLOR_POWERUP_VIDA_EXTRA  0x0033FF66   # verde -- ya no se usa para dibujar el sprite (el
+                                    # corazon es todo rojo), se deja porque otras partes del
+                                    # codigo lo usan como identificador logico del tipo de
+                                    # power-up (HUD, mensajes) y por compatibilidad
+.eqv COLOR_CORAZON        0x00FF3355  # rojo del sprite de corazon (power-up de vida extra)
+.eqv COLOR_CORAZON_OSCURO 0x00CC1133  # sombra en las esquinas inferiores del corazon
+
+# Bomba: gris oscuro (cuerpo), gris claro (brillo central de 2
+# fb-units), amarillo (mecha de 2 fb-units arriba)
+.eqv COLOR_BOMBA_CUERPO   0x00303030
+.eqv COLOR_BOMBA_BRILLO   0x00888888
+.eqv COLOR_BOMBA_MECHA    0x00FFDD00
+
+# Explosion: nucleo amarillo, anillo naranja, esquinas rojo oscuro
+# (reemplaza el blanco plano original -- Etapa de pulido visual)
+.eqv COLOR_EXPLOSION_NUCLEO  0x00FFEE00
+.eqv COLOR_EXPLOSION_MEDIO   0x00FF6600
+.eqv COLOR_EXPLOSION_BORDE   0x00CC1100
+
+# Pantallas finales (Etapa 8): se llena toda la pantalla con este
+# color y se hace parpadear contra negro, en un loop infinito (el
+# juego no se reinicia solo, hay que parar/correr RARS de nuevo).
+.eqv COLOR_FIN_GAME_OVER      0x00990000   # rojo oscuro, derrota (se acabaron las vidas)
+.eqv COLOR_FIN_VICTORIA       0x0000CC44   # verde, victoria (nivel 3 limpio y salida usada)
+.eqv PARPADEO_FIN_CICLOS    400000   # busy-wait entre cada cambio de fase del parpadeo final
+
+# Pantalla de inicio (Etapa 8): color solido y ESTATICO (sin
+# parpadeo, para diferenciarla claramente de Game Over/Victoria,
+# que si parpadean) hasta que el jugador presione ESPACIO.
+.eqv COLOR_INICIO             0x00003366   # azul oscuro
 
 # ----------------------------------------------------------------
 # Tipos de celda del mapa (bits [7:0] de la word de celda)
@@ -239,6 +294,18 @@
 
 .data
 # ----------------------------------------------------------------
+# Offset global de pantalla (Etapa 8 v2): se suma dentro de
+# calcular_posicion_fb a toda coordenada de dibujo, para centrar el
+# mapa jugable y dejarle espacio a la franja de HUD inferior. Vale
+# (PANTALLA_OFFSET_X, PANTALLA_OFFSET_Y) mientras se dibuja el mapa/
+# jugador/enemigos, y se pone temporalmente en (0,0) mientras se
+# dibuja el HUD (que usa coordenadas absolutas de pantalla) -- ver
+# pintar_fondo_hud y pintar_contador_hud.
+# ----------------------------------------------------------------
+pantalla_offset_x: .word PANTALLA_OFFSET_X
+pantalla_offset_y: .word PANTALLA_OFFSET_Y
+
+# ----------------------------------------------------------------
 # Sprites con textura (Etapa de pulido visual): cada tabla tiene
 # 16 words en orden fila por fila (fila 0 izq->der, fila 1, etc.)
 # representando una grilla de 4x4 fb-unidades (= 1 tile de 32x32px
@@ -256,6 +323,77 @@ sprite_destructible:
     .word COLOR_LADRILLO_CLARO, COLOR_LADRILLO_CLARO, COLOR_MORTERO,        COLOR_LADRILLO_CLARO
     .word COLOR_MORTERO,        COLOR_LADRILLO_CLARO, COLOR_LADRILLO_CLARO, COLOR_LADRILLO_CLARO
     .word COLOR_LADRILLO_CLARO, COLOR_LADRILLO_CLARO, COLOR_MORTERO,        COLOR_LADRILLO_CLARO
+
+# Jugador: cuerpo cian con bordes oscuros (da volumen) y "ojos"
+# blancos arriba. Diseno aprobado visualmente antes de codificarse.
+sprite_jugador:
+    .word COLOR_NEGRO,          COLOR_JUGADOR_OSCURO, COLOR_JUGADOR_OSCURO, COLOR_NEGRO
+    .word COLOR_JUGADOR_OSCURO, COLOR_JUGADOR_OJO,    COLOR_JUGADOR_OJO,    COLOR_JUGADOR_OSCURO
+    .word COLOR_JUGADOR,        COLOR_JUGADOR,        COLOR_JUGADOR,        COLOR_JUGADOR
+    .word COLOR_JUGADOR_OSCURO, COLOR_JUGADOR,        COLOR_JUGADOR,        COLOR_JUGADOR_OSCURO
+
+# Bomba: cuerpo gris oscuro, brillo de 2 fb-units gris claro en el
+# centro, mecha de 2 fb-units amarilla arriba.
+sprite_bomba:
+    .word COLOR_NEGRO,        COLOR_BOMBA_MECHA,  COLOR_BOMBA_MECHA,  COLOR_NEGRO
+    .word COLOR_BOMBA_CUERPO, COLOR_BOMBA_CUERPO, COLOR_BOMBA_CUERPO, COLOR_BOMBA_CUERPO
+    .word COLOR_BOMBA_CUERPO, COLOR_BOMBA_BRILLO, COLOR_BOMBA_BRILLO, COLOR_BOMBA_CUERPO
+    .word COLOR_BOMBA_CUERPO, COLOR_BOMBA_CUERPO, COLOR_BOMBA_CUERPO, COLOR_BOMBA_CUERPO
+
+# Enemigo tipo RECTO (rosa): forma de flecha apuntando hacia arriba.
+sprite_enemigo_recto:
+    .word COLOR_NEGRO,              COLOR_ENEMIGO_RECTO,       COLOR_ENEMIGO_RECTO,       COLOR_NEGRO
+    .word COLOR_ENEMIGO_RECTO,      COLOR_ENEMIGO_OJO,         COLOR_ENEMIGO_OJO,         COLOR_ENEMIGO_RECTO
+    .word COLOR_ENEMIGO_RECTO_OSCURO, COLOR_ENEMIGO_RECTO,     COLOR_ENEMIGO_RECTO,       COLOR_ENEMIGO_RECTO_OSCURO
+    .word COLOR_NEGRO,              COLOR_ENEMIGO_RECTO_OSCURO, COLOR_ENEMIGO_RECTO_OSCURO, COLOR_NEGRO
+
+# Enemigo tipo ALEATORIO (violeta): forma irregular en X, esquinas
+# sueltas sugiriendo movimiento erratico.
+sprite_enemigo_aleatorio:
+    .word COLOR_ENEMIGO_ALEATORIO, COLOR_NEGRO,             COLOR_NEGRO,             COLOR_ENEMIGO_ALEATORIO
+    .word COLOR_NEGRO,             COLOR_ENEMIGO_OJO,       COLOR_ENEMIGO_OJO,       COLOR_NEGRO
+    .word COLOR_ENEMIGO_ALEATORIO_OSCURO, COLOR_ENEMIGO_ALEATORIO, COLOR_ENEMIGO_ALEATORIO, COLOR_ENEMIGO_ALEATORIO_OSCURO
+    .word COLOR_ENEMIGO_ALEATORIO, COLOR_NEGRO,             COLOR_NEGRO,             COLOR_ENEMIGO_ALEATORIO
+
+# Enemigo tipo PERSEGUIDOR (marron): cuerpo solido con "colmillos"
+# blancos abajo, mas amenazante.
+sprite_enemigo_perseguidor:
+    .word COLOR_ENEMIGO_PERSEGUIDOR_OSCURO, COLOR_ENEMIGO_PERSEGUIDOR, COLOR_ENEMIGO_PERSEGUIDOR, COLOR_ENEMIGO_PERSEGUIDOR_OSCURO
+    .word COLOR_ENEMIGO_PERSEGUIDOR,        COLOR_ENEMIGO_OJO,         COLOR_ENEMIGO_OJO,         COLOR_ENEMIGO_PERSEGUIDOR
+    .word COLOR_ENEMIGO_PERSEGUIDOR,        COLOR_ENEMIGO_PERSEGUIDOR, COLOR_ENEMIGO_PERSEGUIDOR, COLOR_ENEMIGO_PERSEGUIDOR
+    .word COLOR_ENEMIGO_COLMILLO,           COLOR_ENEMIGO_PERSEGUIDOR_OSCURO, COLOR_ENEMIGO_PERSEGUIDOR_OSCURO, COLOR_ENEMIGO_COLMILLO
+
+# Power-up LLAMA (rango): gota/lengua de fuego amarilla-naranja
+# apuntando hacia arriba.
+sprite_powerup_llama:
+    .word COLOR_NEGRO,               COLOR_POWERUP_LLAMA,        COLOR_NEGRO,        COLOR_NEGRO
+    .word COLOR_NEGRO,               COLOR_POWERUP_LLAMA_OSCURO, COLOR_POWERUP_LLAMA, COLOR_NEGRO
+    .word COLOR_POWERUP_LLAMA_OSCURO, COLOR_POWERUP_LLAMA_OSCURO, COLOR_POWERUP_LLAMA_OSCURO, COLOR_NEGRO
+    .word COLOR_NEGRO,               COLOR_POWERUP_LLAMA_OSCURO, COLOR_NEGRO,        COLOR_NEGRO
+
+# Power-up BOMBA EXTRA: bombita celeste pequena centrada sobre
+# fondo azul oscuro.
+sprite_powerup_bomba_extra:
+    .word COLOR_NEGRO,                     COLOR_NEGRO,                       COLOR_NEGRO,                       COLOR_NEGRO
+    .word COLOR_NEGRO,                     COLOR_POWERUP_BOMBA_EXTRA_OSCURO, COLOR_POWERUP_BOMBA_EXTRA_OSCURO, COLOR_NEGRO
+    .word COLOR_POWERUP_BOMBA_EXTRA_OSCURO, COLOR_POWERUP_BOMBA_EXTRA,        COLOR_POWERUP_BOMBA_EXTRA_OSCURO, COLOR_POWERUP_BOMBA_EXTRA_OSCURO
+    .word COLOR_NEGRO,                     COLOR_POWERUP_BOMBA_EXTRA_OSCURO, COLOR_POWERUP_BOMBA_EXTRA_OSCURO, COLOR_NEGRO
+
+# Power-up VIDA EXTRA: corazon solido en rojo (sin verde), con las
+# dos jorobas clasicas arriba y sombreado en las esquinas inferiores.
+sprite_powerup_vida_extra:
+    .word COLOR_CORAZON,        COLOR_NEGRO,         COLOR_NEGRO,         COLOR_CORAZON
+    .word COLOR_CORAZON,        COLOR_CORAZON,       COLOR_CORAZON,       COLOR_CORAZON
+    .word COLOR_CORAZON_OSCURO, COLOR_CORAZON,       COLOR_CORAZON,       COLOR_CORAZON_OSCURO
+    .word COLOR_NEGRO,          COLOR_CORAZON_OSCURO, COLOR_CORAZON_OSCURO, COLOR_NEGRO
+
+# Explosion: nucleo amarillo brillante en el centro, anillo naranja,
+# esquinas rojo oscuro (reemplaza el blanco plano original).
+sprite_explosion:
+    .word COLOR_EXPLOSION_BORDE, COLOR_EXPLOSION_MEDIO,  COLOR_EXPLOSION_MEDIO,  COLOR_EXPLOSION_BORDE
+    .word COLOR_EXPLOSION_MEDIO, COLOR_EXPLOSION_NUCLEO, COLOR_EXPLOSION_NUCLEO, COLOR_EXPLOSION_MEDIO
+    .word COLOR_EXPLOSION_MEDIO, COLOR_EXPLOSION_NUCLEO, COLOR_EXPLOSION_NUCLEO, COLOR_EXPLOSION_MEDIO
+    .word COLOR_EXPLOSION_BORDE, COLOR_EXPLOSION_MEDIO,  COLOR_EXPLOSION_MEDIO,  COLOR_EXPLOSION_BORDE
 
 
 # ----------------------------------------------------------------
@@ -429,6 +567,14 @@ powerup_suelo_fila:   .word 0:8
 
 .text
 main:
+    jal  pantalla_inicio
+
+    # main_empezar_nivel: punto de entrada de "una partida nueva".
+    # pantalla_inicio solo se muestra una vez (al arrancar RARS);
+    # cuando el jugador pierde o gana y presiona ESPACIO en la
+    # pantalla final, pantalla_fin_parpadeo salta DIRECTO aca (no a
+    # "main"), saltandose pantalla_inicio en los reinicios.
+main_empezar_nivel:
     jal  limpiar_pantalla
     jal  pintar_fondo_hud
     jal  cargar_nivel
@@ -437,13 +583,16 @@ main:
 
     # Dibujar al jugador en su posicion inicial de spawn (fuera del
     # loop, se pinta una sola vez aqui; despues solo se redibuja
-    # si realmente se mueve, ver loop_principal).
-    lw   a0, jugador_x
-    lw   a1, jugador_y
-    li   a2, COLOR_JUGADOR
-    li   a3, TILE_SIZE
-    li   a4, TILE_SIZE
-    jal  pintar_bloque_fb
+    # si realmente se mueve, ver loop_principal). Se usa
+    # pintar_sprite_16 con el sprite con textura (Etapa de pulido
+    # visual) en vez del color plano original; pintar_sprite_16
+    # espera columna/fila de TILE, no fb-unidades, por eso el shift.
+    lw   t0, jugador_x
+    srai a0, t0, TILE_SHIFT
+    lw   t0, jugador_y
+    srai a1, t0, TILE_SHIFT
+    la   a2, sprite_jugador
+    jal  pintar_sprite_16
 
     jal  spawn_enemigos_del_nivel
 
@@ -559,8 +708,244 @@ loop_principal_fin_de_vuelta:
     jal  esperar_frame
     j    loop_principal
 
-fin_programa:
-    j fin_programa
+
+# ================================================================
+# Funcion: pantalla_fin_parpadeo
+# Llena TODA la pantalla real (los 4096 fb-units, sin importar el
+# offset de pantalla -- escribe directo sobre gp igual que
+# limpiar_pantalla) con el color recibido, espera, la llena de
+# negro, espera, y repite -- pero a diferencia de un loop infinito
+# puro, entre cada fase de espera revisa si el jugador presiono
+# ESPACIO. Si lo presiono, llama a reiniciar_partida y salta
+# directo a main_empezar_nivel (ver main) para jugar de nuevo, sin
+# tener que parar/correr RARS otra vez. NO retorna nunca a quien la
+# llamo (llamada siempre via "j", nunca "jal": ver
+# pantalla_game_over/pantalla_victoria).
+# Parametros:
+#   a0: color de la fase "encendida" del parpadeo
+# Retorno: no retorna
+# ================================================================
+pantalla_fin_parpadeo:
+    addi sp, sp, -8
+    sw   ra, 0(sp)
+    sw   s0, 4(sp)
+    mv   s0, a0
+
+pantalla_fin_parpadeo_loop:
+    mv   t0, gp
+    li   t1, FB_TOTAL_UNIDADES
+    mv   t2, s0
+
+pantalla_fin_parpadeo_on:
+    sw   t2, 0(t0)
+    addi t0, t0, 4
+    addi t1, t1, -1
+    bnez t1, pantalla_fin_parpadeo_on
+
+    li   a0, PARPADEO_FIN_CICLOS
+    jal  pantalla_fin_espera_tecla
+    bnez a0, pantalla_fin_parpadeo_reiniciar
+
+    mv   t0, gp
+    li   t1, FB_TOTAL_UNIDADES
+    li   t2, COLOR_NEGRO
+
+pantalla_fin_parpadeo_off:
+    sw   t2, 0(t0)
+    addi t0, t0, 4
+    addi t1, t1, -1
+    bnez t1, pantalla_fin_parpadeo_off
+
+    li   a0, PARPADEO_FIN_CICLOS
+    jal  pantalla_fin_espera_tecla
+    bnez a0, pantalla_fin_parpadeo_reiniciar
+
+    j    pantalla_fin_parpadeo_loop
+
+pantalla_fin_parpadeo_reiniciar:
+    jal  reiniciar_partida
+
+    lw   s0, 4(sp)
+    lw   ra, 0(sp)
+    addi sp, sp, 8
+
+    # No hacemos "ret": saltamos directo a main_empezar_nivel (ver
+    # main) para arrancar una partida nueva desde cero. Es seguro
+    # porque sp ya quedo restaurado arriba, exactamente igual que si
+    # esta funcion hubiera retornado normalmente -- y las funciones
+    # que nos trajeron hasta aca (perder_vida_juego_terminado,
+    # avanzar_nivel_victoria) tambien restauran su propio sp antes
+    # de saltarnos el control (ver esos dos puntos), asi que no hay
+    # fuga de stack acumulada entre partidas repetidas.
+    j    main_empezar_nivel
+
+
+# ================================================================
+# Funcion: pantalla_fin_espera_tecla
+# Busy-wait de "a0" ciclos (igual que esperar_frame), pero revisando
+# en cada iteracion si el jugador presiono ESPACIO. Si lo presiona,
+# corta la espera de inmediato, limpia el estado del teclado, y
+# retorna. No consume teclas que no sean espacio (las deja para la
+# siguiente llamada, a diferencia de pantalla_inicio, porque aca no
+# importa: solo estamos parpadeando, no leyendo otro input).
+# Parametros:
+#   a0: cantidad de ciclos a esperar como maximo
+# Retorno:
+#   a0: 1 si se presiono espacio (corto la espera), 0 si se agoto
+#       el tiempo sin presionar espacio
+# ================================================================
+pantalla_fin_espera_tecla:
+    mv   t3, a0
+
+pantalla_fin_espera_tecla_loop:
+    li   t0, KEY_STATUS_ADDRESS
+    lw   t1, 0(t0)
+    beqz t1, pantalla_fin_espera_tecla_sin_tecla
+
+    li   t0, KEY_INPUT_ADDRESS
+    lw   t1, 0(t0)
+    li   t2, ASCII_SPACE
+    bne  t1, t2, pantalla_fin_espera_tecla_sin_tecla
+
+    li   t0, KEY_STATUS_ADDRESS
+    sw   zero, 0(t0)
+    li   a0, 1
+    ret
+
+pantalla_fin_espera_tecla_sin_tecla:
+    addi t3, t3, -1
+    bnez t3, pantalla_fin_espera_tecla_loop
+
+    li   a0, 0
+    ret
+
+
+# ================================================================
+# Funcion: pantalla_game_over
+# Se llama (via "j", no "jal") cuando el jugador pierde su ultima
+# vida. Parpadea en rojo hasta que se presiona ESPACIO; a partir de
+# ahi el control queda en pantalla_fin_parpadeo, que reinicia la
+# partida y salta directo a main_empezar_nivel (nunca retorna aca).
+# Parametros: ninguno
+# Retorno: no retorna
+# ================================================================
+pantalla_game_over:
+    li   a0, COLOR_FIN_GAME_OVER
+    j    pantalla_fin_parpadeo
+
+
+# ================================================================
+# Funcion: pantalla_victoria
+# Se llama (via "j", no "jal") cuando el jugador limpia el nivel 3
+# y usa la salida. Parpadea en verde hasta que se presiona ESPACIO;
+# a partir de ahi el control queda en pantalla_fin_parpadeo, que
+# reinicia la partida y salta directo a main_empezar_nivel (nunca
+# retorna aca).
+# Parametros: ninguno
+# Retorno: no retorna
+# ================================================================
+pantalla_victoria:
+    li   a0, COLOR_FIN_VICTORIA
+    j    pantalla_fin_parpadeo
+
+
+# ================================================================
+# Funcion: reiniciar_partida
+# Resetea todo el estado global del jugador a los valores de una
+# partida nueva (vidas, rango, max_bombas, invulnerabilidad,
+# posicion, nivel actual, contador de vueltas). Llamada desde
+# pantalla_game_over/pantalla_victoria antes de retornar a main.
+# No toca las tablas de bombas/explosiones/powerups/enemigos ni el
+# mapa: esas las resetea cargar_nivel, que main llama justo despues
+# de esta funcion en el flujo normal.
+# Parametros: ninguno
+# Retorno: void
+# ================================================================
+reiniciar_partida:
+    li   t0, 1
+    la   t1, nivel_actual
+    sw   t0, 0(t1)
+
+    li   t0, JUGADOR_VIDAS_INICIAL
+    la   t1, jugador_vidas
+    sw   t0, 0(t1)
+
+    li   t0, JUGADOR_RANGO_INICIAL
+    la   t1, jugador_rango
+    sw   t0, 0(t1)
+
+    li   t0, JUGADOR_MAX_BOMBAS_INICIAL
+    la   t1, jugador_max_bombas
+    sw   t0, 0(t1)
+
+    la   t1, jugador_bombas_activas
+    sw   zero, 0(t1)
+
+    la   t1, jugador_invuln
+    sw   zero, 0(t1)
+
+    li   t0, SPAWN_COL
+    slli t0, t0, TILE_SHIFT
+    la   t1, jugador_x
+    sw   t0, 0(t1)
+
+    li   t0, SPAWN_FILA
+    slli t0, t0, TILE_SHIFT
+    la   t1, jugador_y
+    sw   t0, 0(t1)
+
+    la   t1, contador_vueltas
+    sw   zero, 0(t1)
+
+    ret
+
+
+# ================================================================
+# Funcion: pantalla_inicio
+# Llena TODA la pantalla real con COLOR_INICIO (color solido,
+# ESTATICO -- a diferencia de pantalla_fin_parpadeo, no alterna con
+# negro, para que se distinga claramente de una pantalla final) y
+# espera bloqueado a que el jugador presione ESPACIO, leyendo
+# KEY_STATUS_ADDRESS/KEY_INPUT_ADDRESS igual que el loop principal.
+# Al presionar espacio, retorna normalmente (SI retorna, a
+# diferencia de las pantallas finales) para que main continue con
+# la inicializacion real del juego.
+# Parametros: ninguno
+# Retorno: void
+# ================================================================
+pantalla_inicio:
+    mv   t0, gp
+    li   t1, FB_TOTAL_UNIDADES
+    li   t2, COLOR_INICIO
+
+pantalla_inicio_pintar:
+    sw   t2, 0(t0)
+    addi t0, t0, 4
+    addi t1, t1, -1
+    bnez t1, pantalla_inicio_pintar
+
+pantalla_inicio_espera:
+    li   t0, KEY_STATUS_ADDRESS
+    lw   t1, 0(t0)
+    beqz t1, pantalla_inicio_espera   # no hay tecla nueva todavia
+
+    li   t0, KEY_INPUT_ADDRESS
+    lw   t1, 0(t0)
+    li   t2, ASCII_SPACE
+    bne  t1, t2, pantalla_inicio_descartar_tecla
+
+    # Se presiono espacio: limpiar el estado del teclado (igual que
+    # hace el loop principal tras procesar una tecla) y retornar.
+    li   t0, KEY_STATUS_ADDRESS
+    sw   zero, 0(t0)
+    ret
+
+pantalla_inicio_descartar_tecla:
+    # Se presiono otra tecla: descartarla y seguir esperando
+    # espacio especificamente.
+    li   t0, KEY_STATUS_ADDRESS
+    sw   zero, 0(t0)
+    j    pantalla_inicio_espera
 
 
 # ================================================================
@@ -584,93 +969,107 @@ limpiar_pantalla_loop:
 
 # ================================================================
 # Funcion: pintar_fondo_hud
-# Pinta el fondo de las dos franjas de HUD (lateral derecha e
-# inferior) con sus colores distintivos. Se llama una vez al
-# inicio de cada nivel (main/avanzar_nivel), antes de pintar el
+# Pinta el fondo de la unica franja de HUD (inferior, a todo lo
+# ancho de la pantalla) con su color distintivo. Se llama una vez
+# al inicio de cada nivel (main/avanzar_nivel), antes de pintar el
 # contenido real del HUD encima.
+#
+# Dibuja en coordenadas ABSOLUTAS de pantalla: pone
+# pantalla_offset_x/y en (0,0) antes de llamar a pintar_bloque_fb y
+# los restaura al salir, para no heredar el offset que usa el mapa.
 # Parametros: ninguno
 # Retorno: void
 # ================================================================
 pintar_fondo_hud:
-    addi sp, sp, -4
+    addi sp, sp, -12
     sw   ra, 0(sp)
+    sw   s0, 4(sp)    # valor original de pantalla_offset_x
+    sw   s1, 8(sp)    # valor original de pantalla_offset_y
 
-    # Franja lateral derecha: desde (HUD_COL_INICIO_FB, 0) hasta
-    # el borde de la pantalla (FB_UNIDADES_LADO), por toda la
-    # altura de la pantalla (incluye la esquina inferior derecha).
-    li   a0, HUD_COL_INICIO_FB
-    li   a1, 0
-    li   a2, COLOR_HUD_FONDO_LATERAL
-    li   a3, HUD_ANCHO_TILES
-    slli a3, a3, TILE_SHIFT       # ancho en tiles -> fb-unidades
-    li   a4, FB_UNIDADES_LADO
-    jal  pintar_bloque_fb
+    la   t0, pantalla_offset_x
+    lw   s0, 0(t0)
+    sw   zero, 0(t0)
+    la   t0, pantalla_offset_y
+    lw   s1, 0(t0)
+    sw   zero, 0(t0)
 
     # Franja inferior: desde (0, HUD_FILA_INICIO_FB) hasta el
-    # borde derecho del AREA DE MAPA solamente (no se solapa con
-    # la franja lateral, que ya cubrio esa esquina arriba).
+    # borde de la pantalla, a todo lo ancho (FB_UNIDADES_LADO).
     li   a0, 0
     li   a1, HUD_FILA_INICIO_FB
     li   a2, COLOR_HUD_FONDO_INFERIOR
-    li   a3, HUD_COL_INICIO_FB     # ancho: justo hasta donde empieza la franja lateral
-    li   a4, HUD_ANCHO_TILES
-    slli a4, a4, TILE_SHIFT
+    li   a3, FB_UNIDADES_LADO
+    li   a4, HUD_ALTO_FB
     jal  pintar_bloque_fb
 
+    la   t0, pantalla_offset_x
+    sw   s0, 0(t0)
+    la   t0, pantalla_offset_y
+    sw   s1, 0(t0)
+
+    lw   s1, 8(sp)
+    lw   s0, 4(sp)
     lw   ra, 0(sp)
-    addi sp, sp, 4
+    addi sp, sp, 12
     ret
 
 
 # ================================================================
 # Funcion: pintar_contador_hud
 # Dibuja "cantidad" cuadraditos de HUD_CUADRADITO fb-unidades de
-# lado, en filas de HUD_CUADRADITOS_POR_FILA, empezando en
-# (HUD_COL_INICIO_FB + HUD_MARGEN_IZQ, fila_inicio_fb) dentro de
-# la franja lateral. Antes de dibujar, borra el area completa que
-# podria haber ocupado el maximo posible de esa categoria (con
-# COLOR_HUD_FONDO_LATERAL), para que bajar el conteo (por ejemplo
+# lado, en una sola fila horizontal, empezando en
+# (col_inicio_fb, HUD_FILA_INICIO_FB + HUD_CUADRADITO_FILA_FB)
+# -- es decir, dentro de la columna de esta categoria en la franja
+# de HUD inferior. Antes de dibujar, borra el ancho completo
+# reservado para el maximo de esta categoria (con
+# COLOR_HUD_FONDO_INFERIOR), para que bajar el conteo (por ejemplo
 # perder una vida) borre correctamente los cuadraditos sobrantes
 # en vez de dejarlos pegados.
+#
+# Dibuja en coordenadas ABSOLUTAS de pantalla (pone
+# pantalla_offset_x/y en 0 mientras dibuja), igual que
+# pintar_fondo_hud.
 # Parametros:
 #   a0: cantidad de cuadraditos a mostrar
-#   a1: fila de inicio (fb-unidad, relativa al inicio de pantalla)
+#   a1: columna de inicio de esta categoria (fb-unidad x, absoluta)
 #   a2: color de los cuadraditos
 #   a3: maximo posible de esta categoria (para saber cuanto borrar)
 # Retorno: void
 # ================================================================
 pintar_contador_hud:
-    addi sp, sp, -24
+    addi sp, sp, -32
     sw   ra, 0(sp)
     sw   s0, 4(sp)    # cantidad a mostrar
-    sw   s1, 8(sp)    # fila de inicio
+    sw   s1, 8(sp)    # columna de inicio
     sw   s2, 12(sp)   # color
     sw   s3, 16(sp)   # maximo (para calcular cuanto borrar)
     sw   s4, 20(sp)   # indice de cuadradito actual (0-based)
+    sw   s5, 24(sp)   # valor original de pantalla_offset_x
+    sw   s6, 28(sp)   # valor original de pantalla_offset_y
 
     mv   s0, a0
     mv   s1, a1
     mv   s2, a2
     mv   s3, a3
 
-    # Borrar el area completa reservada para el maximo de esta
-    # categoria (todas las filas que el maximo podria necesitar),
-    # antes de dibujar los cuadraditos reales.
-    addi t0, s3, HUD_CUADRADITOS_POR_FILA
-    addi t0, t0, -1
-    li   t1, HUD_CUADRADITOS_POR_FILA
-    div  t0, t0, t1          # filas necesarias para el MAXIMO de esta categoria
-    li   t1, HUD_CUADRADITO
-    mul  t0, t0, t1          # alto en fb-unidades a borrar
+    la   t0, pantalla_offset_x
+    lw   s5, 0(t0)
+    sw   zero, 0(t0)
+    la   t0, pantalla_offset_y
+    lw   s6, 0(t0)
+    sw   zero, 0(t0)
 
-    li   a0, HUD_COL_INICIO_FB
-    addi a0, a0, HUD_MARGEN_IZQ
-    mv   a1, s1
-    li   a2, COLOR_HUD_FONDO_LATERAL
-    li   a3, HUD_CUADRADITOS_POR_FILA
+    # Borrar el ancho completo reservado para el maximo de esta
+    # categoria (maximo * HUD_CUADRADITO fb-unidades), antes de
+    # dibujar los cuadraditos reales.
+    mv   a0, s1
+    li   a1, HUD_FILA_INICIO_FB
+    addi a1, a1, HUD_CUADRADITO_FILA_FB
+    li   a2, COLOR_HUD_FONDO_INFERIOR
+    mv   a3, s3
     li   t1, HUD_CUADRADITO
     mul  a3, a3, t1
-    mv   a4, t0
+    li   a4, HUD_CUADRADITO
     jal  pintar_bloque_fb
 
     li   s4, 0
@@ -678,18 +1077,12 @@ pintar_contador_hud:
 pintar_contador_hud_loop:
     bge  s4, s0, pintar_contador_hud_fin
 
-    li   t0, HUD_CUADRADITOS_POR_FILA
-    rem  t1, s4, t0          # columna dentro de la fila (0..POR_FILA-1)
-    div  t2, s4, t0          # numero de fila (0-based)
-
     li   t3, HUD_CUADRADITO
-    mul  t1, t1, t3          # offset x del cuadradito, en fb-unidades
-    li   a0, HUD_COL_INICIO_FB
-    addi a0, a0, HUD_MARGEN_IZQ
-    add  a0, a0, t1
+    mul  t1, s4, t3          # offset x del cuadradito, en fb-unidades
+    add  a0, s1, t1
 
-    mul  t2, t2, t3          # offset y del cuadradito
-    add  a1, s1, t2
+    li   a1, HUD_FILA_INICIO_FB
+    addi a1, a1, HUD_CUADRADITO_FILA_FB
 
     mv   a2, s2
     li   a3, HUD_CUADRADITO
@@ -700,22 +1093,30 @@ pintar_contador_hud_loop:
     j    pintar_contador_hud_loop
 
 pintar_contador_hud_fin:
+    la   t0, pantalla_offset_x
+    sw   s5, 0(t0)
+    la   t0, pantalla_offset_y
+    sw   s6, 0(t0)
+
+    lw   s6, 28(sp)
+    lw   s5, 24(sp)
     lw   s4, 20(sp)
     lw   s3, 16(sp)
     lw   s2, 12(sp)
     lw   s1, 8(sp)
     lw   s0, 4(sp)
     lw   ra, 0(sp)
-    addi sp, sp, 24
+    addi sp, sp, 32
     ret
 
 
 # ================================================================
 # Funcion: pintar_hud_completo
-# Redibuja las 3 categorias del HUD lateral (vidas, rango, bombas)
-# con los valores actuales del jugador. Se llama cada vez que
-# alguno de esos valores puede haber cambiado (perder/ganar vida,
-# recoger powerup de rango o bomba extra).
+# Redibuja las 3 categorias del HUD (vidas, rango, bombas) con los
+# valores actuales del jugador, cada una en su columna dentro de la
+# unica franja de HUD inferior. Se llama cada vez que alguno de
+# esos valores puede haber cambiado (perder/ganar vida, recoger
+# powerup de rango o bomba extra).
 # Parametros: ninguno (lee jugador_vidas/jugador_rango/jugador_max_bombas)
 # Retorno: void
 # ================================================================
@@ -724,19 +1125,19 @@ pintar_hud_completo:
     sw   ra, 0(sp)
 
     lw   a0, jugador_vidas
-    li   a1, HUD_VIDAS_FILA_INICIO_FB
+    li   a1, HUD_COL_VIDAS_INICIO_FB
     li   a2, COLOR_POWERUP_VIDA_EXTRA
     li   a3, JUGADOR_VIDAS_TOPE
     jal  pintar_contador_hud
 
     lw   a0, jugador_rango
-    li   a1, HUD_RANGO_FILA_INICIO_FB
+    li   a1, HUD_COL_RANGO_INICIO_FB
     li   a2, COLOR_POWERUP_LLAMA
     li   a3, JUGADOR_RANGO_TOPE
     jal  pintar_contador_hud
 
     lw   a0, jugador_max_bombas
-    li   a1, HUD_BOMBAS_FILA_INICIO_FB
+    li   a1, HUD_COL_BOMBAS_INICIO_FB
     li   a2, COLOR_POWERUP_BOMBA_EXTRA
     li   a3, JUGADOR_MAX_BOMBAS_TOPE
     jal  pintar_contador_hud
@@ -763,13 +1164,25 @@ esperar_frame_loop:
 
 # ================================================================
 # Funcion: calcular_posicion_fb
+# Suma el offset global de pantalla (pantalla_offset_x/y) a las
+# coordenadas recibidas antes de calcular la direccion. Para
+# dibujar en coordenadas ABSOLUTAS de pantalla (como el HUD),
+# pantalla_offset_x/y deben estar en (0,0) al momento de llamar
+# (ver pintar_fondo_hud/pintar_contador_hud).
 # Parametros:
-#   a0: x en fb-unidades (0-63)
-#   a1: y en fb-unidades (0-63)
+#   a0: x en fb-unidades (0-63 antes de aplicar el offset)
+#   a1: y en fb-unidades (0-63 antes de aplicar el offset)
 # Retorno:
 #   a0: direccion en el framebuffer
 # ================================================================
 calcular_posicion_fb:
+    la   t2, pantalla_offset_x
+    lw   t2, 0(t2)
+    add  a0, a0, t2
+    la   t2, pantalla_offset_y
+    lw   t2, 0(t2)
+    add  a1, a1, t2
+
     slli t0, a1, FB_ANCHO_SHIFT  # t0 = y * 64
     add  t1, a0, t0              # t1 = y*64 + x  (offset en unidades)
     slli t1, t1, 2                # t1 = offset en bytes (*4)
@@ -959,6 +1372,14 @@ pintar_sprite_16_fin:
 # Retorno:
 #   a0: color (0x00RRGGBB)
 # ================================================================
+# NOTA: CELDA_BOMBA y CELDA_EXPLOSION ya NO se resuelven aca --
+# redibujar_terreno_celda las intercepta antes de llamar a
+# celda_color y las dibuja con sprite_bomba/sprite_explosion (Etapa
+# de pulido visual). Quedan solo INDESTRUCTIBLE/DESTRUCTIBLE (que
+# tampoco llegan aca en la practica, redibujar_terreno_celda usa
+# sus propios sprites primero, pero se dejan por si celda_color se
+# llama alguna vez fuera de ese flujo) y SALIDA/default, que si
+# siguen siendo color plano.
 celda_color:
     andi t0, a0, 0xFF
 
@@ -968,10 +1389,6 @@ celda_color:
     beq  t0, t1, celda_color_destructible
     li   t1, CELDA_SALIDA
     beq  t0, t1, celda_color_salida
-    li   t1, CELDA_BOMBA
-    beq  t0, t1, celda_color_bomba
-    li   t1, CELDA_EXPLOSION
-    beq  t0, t1, celda_color_explosion
 
     li   a0, COLOR_NEGRO
     ret
@@ -986,14 +1403,6 @@ celda_color_destructible:
 
 celda_color_salida:
     li   a0, COLOR_AMARILLO
-    ret
-
-celda_color_bomba:
-    li   a0, COLOR_ROJO
-    ret
-
-celda_color_explosion:
-    li   a0, COLOR_BLANCO
     ret
 
 
@@ -1084,27 +1493,30 @@ enemigo_en_celda_fin:
 
 
 # ================================================================
-# Funcion: color_de_enemigo
+# Funcion: sprite_de_enemigo
+# Reemplaza a la vieja color_de_enemigo (Etapa de pulido visual):
+# en vez de un color plano, devuelve el puntero a la tabla de 16
+# words del sprite con textura correspondiente al tipo de enemigo.
 # Parametros:
 #   a0: tipo de enemigo
 # Retorno:
-#   a0: color
+#   a0: direccion de la tabla de sprite (16 words)
 # ================================================================
-color_de_enemigo:
+sprite_de_enemigo:
     li   t0, ENEMIGO_TIPO_RECTO
-    beq  a0, t0, color_de_enemigo_recto
+    beq  a0, t0, sprite_de_enemigo_recto
     li   t0, ENEMIGO_TIPO_ALEATORIO
-    beq  a0, t0, color_de_enemigo_aleatorio
+    beq  a0, t0, sprite_de_enemigo_aleatorio
 
-    li   a0, COLOR_ENEMIGO_PERSEGUIDOR
+    la   a0, sprite_enemigo_perseguidor
     ret
 
-color_de_enemigo_recto:
-    li   a0, COLOR_ENEMIGO_RECTO
+sprite_de_enemigo_recto:
+    la   a0, sprite_enemigo_recto
     ret
 
-color_de_enemigo_aleatorio:
-    li   a0, COLOR_ENEMIGO_ALEATORIO
+sprite_de_enemigo_aleatorio:
+    la   a0, sprite_enemigo_aleatorio
     ret
 
 
@@ -1170,27 +1582,113 @@ powerup_suelo_en_celda_fin:
 
 
 # ================================================================
-# Funcion: color_de_powerup_suelo
+# Funcion: sprite_de_powerup_suelo
+# Reemplaza a la vieja color_de_powerup_suelo (Etapa de pulido
+# visual): en vez de un color plano, devuelve el puntero a la
+# tabla de 16 words del sprite con textura correspondiente.
 # Parametros:
 #   a0: tipo de power-up (POWERUP_LLAMA, POWERUP_BOMBA_EXTRA, POWERUP_VIDA_EXTRA)
 # Retorno:
-#   a0: color
+#   a0: direccion de la tabla de sprite (16 words)
 # ================================================================
-color_de_powerup_suelo:
+sprite_de_powerup_suelo:
     li   t0, POWERUP_LLAMA
-    beq  a0, t0, color_de_powerup_suelo_llama
+    beq  a0, t0, sprite_de_powerup_suelo_llama
     li   t0, POWERUP_BOMBA_EXTRA
-    beq  a0, t0, color_de_powerup_suelo_bomba
+    beq  a0, t0, sprite_de_powerup_suelo_bomba
 
-    li   a0, COLOR_POWERUP_VIDA_EXTRA
+    la   a0, sprite_powerup_vida_extra
     ret
 
-color_de_powerup_suelo_llama:
-    li   a0, COLOR_POWERUP_LLAMA
+sprite_de_powerup_suelo_llama:
+    la   a0, sprite_powerup_llama
     ret
 
-color_de_powerup_suelo_bomba:
-    li   a0, COLOR_POWERUP_BOMBA_EXTRA
+sprite_de_powerup_suelo_bomba:
+    la   a0, sprite_powerup_bomba_extra
+    ret
+
+
+# ================================================================
+# Funcion: redibujar_terreno_celda
+# Dibuja SOLO el terreno de la celda (lo que hay segun el mapa:
+# vacia, bloque indestructible/destructible, bomba, explosion, o
+# salida), ignorando por completo si el jugador/un enemigo/un
+# power-up estan parados encima. Usada por redibujar_celda (que
+# primero chequea esas 3 cosas y solo cae aca si no hay ninguna) y
+# por parpadear_jugador (que durante la fase "oculta" del parpadeo
+# de invulnerabilidad necesita mostrar el terreno de abajo, no al
+# jugador) -- antes de esta extraccion, parpadear_jugador llamaba a
+# celda_color directamente y se saltaba los sprites con textura,
+# lo que se notaba por ejemplo si el jugador caminaba (invulnerable)
+# sobre una celda en llamas: se veia el viejo blanco plano en vez
+# del sprite de explosion naranja/amarillo.
+# Parametros:
+#   a0: columna de tile
+#   a1: fila de tile
+# Retorno: void
+# ================================================================
+redibujar_terreno_celda:
+    addi sp, sp, -12
+    sw   ra, 0(sp)
+    sw   s0, 4(sp)
+    sw   s1, 8(sp)
+
+    mv   s0, a0
+    mv   s1, a1
+
+    jal  celda_tipo
+
+    li   t0, CELDA_INDESTRUCTIBLE
+    beq  a0, t0, redibujar_terreno_celda_sprite_indestructible
+    li   t0, CELDA_DESTRUCTIBLE
+    beq  a0, t0, redibujar_terreno_celda_sprite_destructible
+    li   t0, CELDA_BOMBA
+    beq  a0, t0, redibujar_terreno_celda_sprite_bomba
+    li   t0, CELDA_EXPLOSION
+    beq  a0, t0, redibujar_terreno_celda_sprite_explosion
+
+    jal  celda_color
+    mv   a2, a0
+    mv   a0, s0
+    mv   a1, s1
+    li   a3, 1
+    li   a4, 1
+    jal  pintar_bloque_tiles
+    j    redibujar_terreno_celda_fin
+
+redibujar_terreno_celda_sprite_indestructible:
+    la   a2, sprite_indestructible
+    mv   a0, s0
+    mv   a1, s1
+    jal  pintar_sprite_16
+    j    redibujar_terreno_celda_fin
+
+redibujar_terreno_celda_sprite_destructible:
+    la   a2, sprite_destructible
+    mv   a0, s0
+    mv   a1, s1
+    jal  pintar_sprite_16
+    j    redibujar_terreno_celda_fin
+
+redibujar_terreno_celda_sprite_bomba:
+    la   a2, sprite_bomba
+    mv   a0, s0
+    mv   a1, s1
+    jal  pintar_sprite_16
+    j    redibujar_terreno_celda_fin
+
+redibujar_terreno_celda_sprite_explosion:
+    la   a2, sprite_explosion
+    mv   a0, s0
+    mv   a1, s1
+    jal  pintar_sprite_16
+
+redibujar_terreno_celda_fin:
+    lw   s1, 8(sp)
+    lw   s0, 4(sp)
+    lw   ra, 0(sp)
+    addi sp, sp, 12
     ret
 
 
@@ -1227,50 +1725,33 @@ redibujar_celda:
 
     mv   a0, s0
     mv   a1, s1
-    jal  celda_tipo
-
-    li   t0, CELDA_INDESTRUCTIBLE
-    beq  a0, t0, redibujar_celda_sprite_indestructible
-    li   t0, CELDA_DESTRUCTIBLE
-    beq  a0, t0, redibujar_celda_sprite_destructible
-
-    jal  celda_color
-    j    redibujar_celda_pintar
-
-redibujar_celda_sprite_indestructible:
-    la   a2, sprite_indestructible
-    mv   a0, s0
-    mv   a1, s1
-    jal  pintar_sprite_16
-    j    redibujar_celda_fin
-
-redibujar_celda_sprite_destructible:
-    la   a2, sprite_destructible
-    mv   a0, s0
-    mv   a1, s1
-    jal  pintar_sprite_16
+    jal  redibujar_terreno_celda
     j    redibujar_celda_fin
 
 redibujar_celda_jugador:
-    li   a0, COLOR_JUGADOR
-    j    redibujar_celda_pintar
+    la   a2, sprite_jugador
+    mv   a0, s0
+    mv   a1, s1
+    jal  pintar_sprite_16
+    j    redibujar_celda_fin
 
 redibujar_celda_enemigo:
     mv   a0, a1
-    jal  color_de_enemigo
-    j    redibujar_celda_pintar
-
-redibujar_celda_powerup:
-    mv   a0, a1
-    jal  color_de_powerup_suelo
-
-redibujar_celda_pintar:
+    jal  sprite_de_enemigo
     mv   a2, a0
     mv   a0, s0
     mv   a1, s1
-    li   a3, 1
-    li   a4, 1
-    jal  pintar_bloque_tiles
+    jal  pintar_sprite_16
+    j    redibujar_celda_fin
+
+redibujar_celda_powerup:
+    mv   a0, a1
+    jal  sprite_de_powerup_suelo
+    mv   a2, a0
+    mv   a0, s0
+    mv   a1, s1
+    jal  pintar_sprite_16
+    j    redibujar_celda_fin
 
 redibujar_celda_fin:
     lw   s1, 8(sp)
@@ -2478,7 +2959,15 @@ perder_vida:
     j    perder_vida_fin
 
 perder_vida_juego_terminado:
-    j    fin_programa
+    # Restauramos sp antes de saltar (como si perder_vida hubiera
+    # retornado normalmente): pantalla_game_over/pantalla_victoria
+    # eventualmente saltan a main_empezar_nivel para reiniciar la
+    # partida, y con el juego ahora rejugable indefinidamente en la
+    # misma sesion de RARS, no queremos que cada Game Over deje 12
+    # bytes de stack abandonados -- eso se acumularia partida tras
+    # partida.
+    addi sp, sp, 12
+    j    pantalla_game_over
 
 perder_vida_fin:
     lw   s1, 8(sp)
@@ -2997,10 +3486,9 @@ spawn_enemigos_del_nivel:
 # Funcion: avanzar_nivel
 # Se llama cuando el jugador pisa la salida con el nivel limpio de
 # enemigos. Incrementa nivel_actual; si ya se completo el nivel 3,
-# es VICTORIA (fin del juego, distinto de game over -- por ahora
-# tambien salta a fin_programa, igual que perder_vida cuando se
-# acaban las vidas; una pantalla de victoria real queda para la
-# etapa de pulido). Si quedan niveles, carga el mapa siguiente,
+# es VICTORIA (fin del juego, distinto de game over): salta a
+# pantalla_victoria (pantalla verde parpadeante, loop infinito). Si
+# quedan niveles, carga el mapa siguiente,
 # limpia bombas/explosiones/powerups/enemigos del nivel anterior
 # (via cargar_nivel), reposiciona al jugador en el spawn, y
 # redibuja todo. Las vidas, rango, y max_bombas del jugador NO se
@@ -3038,12 +3526,14 @@ avanzar_nivel:
     jal  pintar_mapa
     jal  pintar_hud_completo
 
-    lw   a0, jugador_x
-    lw   a1, jugador_y
-    li   a2, COLOR_JUGADOR
-    li   a3, TILE_SIZE
-    li   a4, TILE_SIZE
-    jal  pintar_bloque_fb
+    # Sprite del jugador con textura (ver comentario identico en
+    # main): jugador_x/y ya se fijaron arriba a SPAWN_COL/SPAWN_FILA
+    # (en fb-unidades), asi que usamos directamente las constantes
+    # de tile en vez de volver a hacer el shift inverso.
+    li   a0, SPAWN_COL
+    li   a1, SPAWN_FILA
+    la   a2, sprite_jugador
+    jal  pintar_sprite_16
 
     jal  spawn_enemigos_del_nivel
 
@@ -3052,11 +3542,12 @@ avanzar_nivel:
     ret
 
 avanzar_nivel_victoria:
-    # Salto directo a fin_programa, mismo patron que
-    # perder_vida_juego_terminado: es seguro porque fin_programa
-    # es un loop infinito que nunca retorna, asi que no importa
-    # que el stack frame de avanzar_nivel quede sin desenrollar.
-    j    fin_programa
+    # Restauramos sp antes de saltar, mismo motivo que en
+    # perder_vida_juego_terminado: con el juego rejugable
+    # indefinidamente, hay que evitar que cada Victoria deje 4
+    # bytes de stack abandonados acumulandose entre partidas.
+    addi sp, sp, 4
+    j    pantalla_victoria
 
 
 # ================================================================
@@ -3142,10 +3633,8 @@ matar_enemigos_en_fuego_fin:
 # Retorno: void
 # ================================================================
 parpadear_jugador:
-    addi sp, sp, -12
+    addi sp, sp, -4
     sw   ra, 0(sp)
-    sw   s0, 4(sp)
-    sw   s1, 8(sp)
 
     lw   t0, jugador_x
     srai a0, t0, TILE_SHIFT
@@ -3162,22 +3651,15 @@ parpadear_jugador:
     j    parpadear_jugador_fin
 
 parpadear_jugador_oculto:
-    mv   s0, a0
-    mv   s1, a1
-    jal  celda_tipo
-    jal  celda_color
-    mv   a2, a0
-    mv   a0, s0
-    mv   a1, s1
-    li   a3, 1
-    li   a4, 1
-    jal  pintar_bloque_tiles
+    # Dibuja el terreno de abajo (con su sprite/textura correcta,
+    # incluyendo el caso de estar parado sobre fuego mientras se es
+    # invulnerable) en vez del jugador, para la fase "oculta" del
+    # parpadeo. a0/a1 (col/fila) ya vienen calculados arriba.
+    jal  redibujar_terreno_celda
 
 parpadear_jugador_fin:
-    lw   s1, 8(sp)
-    lw   s0, 4(sp)
     lw   ra, 0(sp)
-    addi sp, sp, 12
+    addi sp, sp, 4
     ret
 
 
