@@ -3,7 +3,6 @@
 Reescritura completa de un Bomberman clásico, programado enteramente en ensamblador **RISC-V de 32 bits**, pensado para correr en el simulador [RARS](https://github.com/TheThirdOne/rars) 1.6. Es el Proyecto 2 del curso EL-3310 (Diseño de Sistemas Digitales), y su `.text`/`.data` compilados sirven además como carga de trabajo para validar dos emuladores RISC-V propios (uno en NASM x86-64, otro en C).
 
 ![Captura del juego en RARS](capturas/juego-en-partida.png)
-> 📸 **Capturar:** una partida en curso, a mitad de nivel, con enemigos, bloques destructibles y el HUD visible abajo.
 
 ---
 
@@ -41,7 +40,6 @@ Reescritura completa de un Bomberman clásico, programado enteramente en ensambl
 5. Vas a ver una pantalla azul sólida: presioná **ESPACIO** para arrancar la partida.
 
 ![Configuración del Bitmap Display](capturas/config-bitmap-display.png)
-> 📸 **Capturar:** el panel de configuración del Bitmap Display de RARS con los valores de arriba.
 
 ---
 
@@ -97,9 +95,6 @@ flowchart LR
 
 El mapa **no** arranca en la esquina (0,0) del framebuffer: se centra horizontalmente y se desplaza 1 tile hacia abajo, dejando toda la franja inferior libre para el HUD. Esto se logra con un **offset global de pantalla** (`pantalla_offset_x = 6`, `pantalla_offset_y = 4`, en unidades) que se suma dentro de `calcular_posicion_fb` a toda coordenada de dibujo del mundo del juego. El HUD, en cambio, se dibuja en coordenadas absolutas (offset puesto en `0,0` temporalmente mientras se pinta), porque debe ocupar toda la franja inferior sin que el desplazamiento lo afecte.
 
-![Diagrama de la pantalla con medidas superpuestas](capturas/diagrama-pantalla-medido.png)
-> 📸 **Capturar (opcional):** una captura del juego con anotaciones manuales (por ejemplo, en un editor de imágenes) marcando el margen izquierdo/derecho de 6 unidades, el margen superior de 4, y la franja de HUD de 8 unidades de alto.
-
 ---
 
 ## El mapa y las celdas
@@ -135,7 +130,6 @@ bits [15:8]  -> power-up oculto (solo aplica si el tipo es DESTRUCTIBLE)
 Los 3 mapas (uno por nivel) están **pre-generados y verificados por código** (conectividad comprobada con búsqueda en anchura / BFS, para garantizar que el jugador y los 3 enemigos siempre puedan alcanzarse entre sí, aunque sea rompiendo bloques) y quedan escritos como datos literales (`mapa_nivel_1/2/3`) dentro del `.asm`.
 
 ![Mapa del nivel 1 al arrancar](capturas/mapa-nivel-1.png)
-> 📸 **Capturar:** el nivel 1 recién cargado, mostrando el patrón de bloques indestructibles (en damero) y destructibles (ladrillo).
 
 ---
 
@@ -148,9 +142,6 @@ Una sola franja horizontal, a todo el ancho de la pantalla (64 unidades), dividi
 | Izquierda (0–22) | Verde | Vidas | 9 |
 | Centro (22–43) | Amarillo | Rango de explosión | 5 |
 | Derecha (43–64) | Celeste | Bombas simultáneas | 8 |
-
-![HUD en detalle](capturas/hud-detalle.png)
-> 📸 **Capturar:** un zoom/recorte de la franja de HUD con vidas, rango y bombas en distintos valores (por ejemplo, tras recoger algún power-up).
 
 ---
 
@@ -172,12 +163,6 @@ stateDiagram-v2
 ```
 
 Una regla clásica de Bomberman que se respeta acá: **la salida solo funciona si ya no quedan enemigos vivos** en el nivel actual, aunque esté visible.
-
-![Pantalla de Game Over](capturas/pantalla-game-over.png)
-> 📸 **Capturar:** la pantalla roja parpadeante de Game Over.
-
-![Pantalla de Victoria](capturas/pantalla-victoria.png)
-> 📸 **Capturar:** la pantalla verde parpadeante de Victoria (tras limpiar el nivel 3).
 
 ---
 
@@ -236,7 +221,6 @@ flowchart LR
 ```
 
 ![Explosión en curso](capturas/explosion-en-curso.png)
-> 📸 **Capturar:** una explosión activa, mostrando el patrón de fuego en cruz con los colores naranja/amarillo/rojo.
 
 ---
 
@@ -252,8 +236,7 @@ Hay 3 tipos, cada uno con su propio color/sprite e IA:
 
 Los enemigos se mueven más lento que el jugador: solo una vez cada `ENEMIGO_MOVIMIENTO_INTERVALO_FRAMES` frames (el jugador se mueve inmediatamente al presionar una tecla). Mueren si el fuego de una explosión los alcanza. El nivel se considera "limpio" (y la salida se activa) recién cuando **todos** los enemigos del nivel están muertos.
 
-![Los 3 tipos de enemigo en pantalla](capturas/tres-enemigos.png)
-> 📸 **Capturar:** un momento del juego donde se vean los 3 tipos de enemigo (rosa, violeta, marrón) a la vez, para comparar sus sprites.
+![Enemigo en pantalla](capturas/tres-enemigos.png)
 
 ---
 
@@ -268,9 +251,6 @@ Aparecen en el suelo al destruir un bloque que los tenía ocultos, y se recogen 
 | Vida extra | Corazón rojo | +1 vida (tope 9) |
 
 Las mejoras de rango y bombas máximas **persisten entre niveles** (no se resetean al pasar de nivel, solo al perder todas las vidas o ganar la partida completa).
-
-![Power-ups visibles en el suelo](capturas/powerups-en-suelo.png)
-> 📸 **Capturar:** los 3 tipos de power-up visibles en el suelo al mismo tiempo (podés destruir varios bloques seguidos hasta lograrlo).
 
 ---
 
@@ -336,7 +316,6 @@ Cada tabla de entidades usa el patrón clásico de **arreglos paralelos**: la en
 Todos los elementos visuales (jugador, los 3 enemigos, bomba, los 3 power-ups, explosión, y los bloques destructible/indestructible) se dibujan como sprites de **4×4 fb-unidades** (una tabla de 16 colores, fila por fila), en vez de un color plano. La función `pintar_sprite_16` recorre cualquiera de estas tablas y pinta cada unidad con su color correspondiente.
 
 ![Hoja de sprites](capturas/hoja-de-sprites.png)
-> 📸 **Capturar:** un montaje (podés usar una herramienta de edición simple) con cada sprite ampliado: jugador, los 3 enemigos, bomba, los 3 power-ups, explosión, y los 2 tipos de bloque.
 
 ---
 

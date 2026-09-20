@@ -158,11 +158,11 @@
                                     # verse en las ultimas celdas, aunque gracias al arreglo de
                                     # redibujar_celda en explotar_bomba/explotar_direccion ya no
                                     # quedaban bombas fantasma pegadas en pantalla).
-.eqv BOMBA_TIMER_INICIAL    220    # "ticks" del loop principal antes de explotar. Bajado de
+.eqv BOMBA_TIMER_INICIAL    400    # "ticks" del loop principal antes de explotar. Bajado de
                                    # 400 (que se sentia demasiado largo). NOTA: sigue siendo
                                    # una aproximacion sin medir FPS real -- calibrar jugando,
                                    # igual que FRAME_DELAY_CICLOS.
-.eqv EXPLOSION_TIMER_INICIAL 30   # ticks que dura visible cada celda de fuego antes de apagarse
+.eqv EXPLOSION_TIMER_INICIAL 120   # ticks que dura visible cada celda de fuego antes de apagarse
 .eqv JUGADOR_RANGO_INICIAL     1  # celdas de alcance de la explosion en cada direccion desde el centro (antes de powerup de llama)
 .eqv JUGADOR_MAX_BOMBAS_INICIAL 1  # bombas propias simultaneas permitidas antes de recoger powerup de bomba extra
 .eqv JUGADOR_RANGO_TOPE         5  # rango maximo alcanzable con powerups de llama; llamas adicionales no hacen nada
@@ -205,7 +205,7 @@
                                      # conflicto de granularidad fraccionaria que ya resolvimos
                                      # para el jugador en la Etapa 2/3
 
-.eqv FRAME_DELAY_CICLOS      5000  # iteraciones del busy-wait de esperar_frame; calibrar a gusto (mas alto = mas lento/estable, mas bajo = mas rapido). Bajado de 300000 tras pasar a redibujado parcial (Etapa 2): con mucho menos trabajo por frame, un delay tan alto se sentia innecesariamente lento.
+.eqv FRAME_DELAY_CICLOS      7000  # iteraciones del busy-wait de esperar_frame; calibrar a gusto (mas alto = mas lento/estable, mas bajo = mas rapido). Bajado de 300000 tras pasar a redibujado parcial (Etapa 2): con mucho menos trabajo por frame, un delay tan alto se sentia innecesariamente lento.
 
 # ----------------------------------------------------------------
 # Colores en formato 0x00RRGGBB
