@@ -220,7 +220,9 @@ flowchart LR
     E -->|nada| H[Celda queda vacia]
 ```
 
-![Explosión en curso](capturas/explosion-en-curso.png)
+![Bomba colocada, esperando a explotar](capturas/bomba-en-espera.png)
+
+![La misma bomba, explotando en cruz](capturas/bomba-explota.png)
 
 ---
 
@@ -236,7 +238,7 @@ Hay 3 tipos, cada uno con su propio color/sprite e IA:
 
 Los enemigos se mueven más lento que el jugador: solo una vez cada `ENEMIGO_MOVIMIENTO_INTERVALO_FRAMES` frames (el jugador se mueve inmediatamente al presionar una tecla). Mueren si el fuego de una explosión los alcanza. El nivel se considera "limpio" (y la salida se activa) recién cuando **todos** los enemigos del nivel están muertos.
 
-![Enemigo en pantalla](capturas/tres-enemigos.png)
+![Los 3 tipos de enemigo](capturas/tres-enemigos.png)
 
 ---
 
@@ -250,7 +252,13 @@ Aparecen en el suelo al destruir un bloque que los tenía ocultos, y se recogen 
 | Bomba extra | Bombita celeste/azul | +1 bomba simultánea (tope 8) |
 | Vida extra | Corazón rojo | +1 vida (tope 9) |
 
-Las mejoras de rango y bombas máximas **persisten entre niveles** (no se resetean al pasar de nivel, solo al perder todas las vidas o ganar la partida completa).
+![Power-ups en el suelo: vida extra, bomba extra, y la salida revelada al fondo](capturas/powerups-en-suelo.png)
+
+Las mejoras de rango y bombas máximas **persisten entre niveles** (no se resetean al pasar de nivel, solo al perder todas las vidas o ganar la partida completa). Así se ve el jugador tras acumular varios power-ups de cada tipo:
+
+![Rango de explosión al tope (5): el fuego cubre gran parte del mapa](capturas/rango-maximo.png)
+
+![Bombas simultáneas al tope (8): varias bombas activas a la vez](capturas/bombas-maximas.png)
 
 ---
 
